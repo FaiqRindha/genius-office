@@ -413,6 +413,7 @@ export class Building {
           palette: Number.isInteger(s.palette) && (s.palette as number) >= 0 ? (s.palette as number) : 0,
           addedBy: typeof s.addedBy === 'string' ? s.addedBy : '?',
           addedAt: typeof s.addedAt === 'number' ? s.addedAt : Date.now(),
+          ...(typeof s.buildingId === 'string' && /^[a-z0-9-]{1,64}$/.test(s.buildingId) ? { buildingId: s.buildingId } : {}),
         });
       }
     } catch (err) {

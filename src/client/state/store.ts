@@ -152,7 +152,8 @@ export class Store {
 
   /** Whether someone is on your floor (people on other floors aren't in the room with you). */
   onMyFloor(peer: PeerInfo): boolean {
-    return (peer.floor ?? null) === this.floor;
+    const mine = this.peers.get(this.you);
+    return peer.buildingId === mine?.buildingId && (peer.floor ?? null) === this.floor;
   }
 
   workerAtDesk(deskId: string): WorkerInfo | undefined {

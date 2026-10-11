@@ -7,12 +7,12 @@ declare module '../store' {
 }
 
 export const campus: Slice = {
-  init(s: Store) { s.campus = { buildings: [] }; },
+  init(s: Store) { s.campus = { buildings: [], campus: [] }; },
   on: {
     welcome(s, m) { s.campus = m.building; return ['campus']; },
     building(s, m) { s.campus = m.state; return ['campus']; },
     'building.access'(s, m) {
-      s.campus = { ...s.campus, buildings: s.campus.buildings.map((b) => b.id === m.buildingId ? { ...b, access: m.access } : b) };
+      s.campus = { ...s.campus, buildings: s.campus.buildings.map((b) => b.id === m.buildingId ? { ...b, access: m.access } : b), campus: s.campus.campus.map((b) => b.id === m.buildingId ? { ...b, access: m.access } : b) };
       return ['campus'];
     },
   },

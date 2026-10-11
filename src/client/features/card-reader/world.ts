@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { store } from '../../state';
 import { mesh, roundedBox, textPlane, toon, toonUnique } from '../../world/toon';
 import type { Collider, Interactable } from '../../world/types';
 import type { Fixture } from '../../world/office/fixture';
@@ -12,9 +13,16 @@ export const cardReader: Fixture = () => {
   group.position.set(10.7, 1.5, 9.72);
   const body = toon('#202a35');
   const trim = toon('#9ba9b5');
-  const lamp = toonUnique('#67d98b');
-  lamp.emissive = new THREE.Color('#35bd69');
-  lamp.emissiveIntensity = 0.8;
+  const lamp = toonUnique('#9ba9b5');
+  const refresh = () => {
+    const access = store.campus.buildings.find((building) => building.id === store.campus.selected)?.access ?? 'locked';
+    const color = access === 'granted' ? '#67d98b' : access === 'scanning' ? '#63b3ed' : access === 'denied' ? '#f26b61' : '#9ba9b5';
+    lamp.color.set(color);
+    lamp.emissive = new THREE.Color(color);
+    lamp.emissiveIntensity = 0.8;
+  };
+  store.on('campus', refresh);
+  refresh();
   group.add(mesh(roundedBox(0.56, 0.9, 0.13, 0.06), body, 0, 0, 0));
   group.add(mesh(roundedBox(0.42, 0.2, 0.04, 0.025), trim, 0, 0.16, 0.08));
   group.add(mesh(new THREE.CircleGeometry(0.09, 16), lamp, 0, -0.18, 0.08));

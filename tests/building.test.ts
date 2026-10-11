@@ -46,6 +46,13 @@ test("floors that aren't there can't be taken off", (t) => {
   assert.deepEqual(saved(dataDir), ['api', 'web', 'docs']);
 });
 
+test('keeps a floor in its campus building after restart', (t) => {
+  const { root, dataDir, defs } = office(t);
+  defs[1].buildingId = 'campus-a';
+  writeFileSync(path.join(dataDir, 'floors.json'), JSON.stringify(defs));
+  assert.equal(new Building(dataDir, root).list().find((floor) => floor.id === 'web')?.buildingId, 'campus-a');
+});
+
 test('the floor the office was started in comes off too, stays off after a restart, and moves back in when its repository is added again', async (t) => {
   const { root, dataDir, defs } = office(t);
   // The office's own checkout, with its GitHub origin (how it's recognised once it's no longer a floor).

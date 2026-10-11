@@ -16,7 +16,7 @@ import { $, toast } from '../ui/dom';
 import { routeElevatorMessage } from '../ui/elevator';
 import { providerLabel } from '../ui/provider';
 import { routePullMessage } from '../ui/pull';
-import { needsSigningIn, openSignIns } from '../ui/signins';
+import { openSignIns } from '../ui/signins';
 import { routeTeamMessage } from '../ui/team';
 import { openTerminalFor, routeTerminalMessage } from '../ui/terminal';
 import { restarting, showRestarting, showUpgraded } from '../ui/upgrade';
@@ -45,7 +45,6 @@ export function installArrival(ctx: Ctx, core: CoreState, parts: ArrivalParts) {
 
   net.onStatus((up) => $('conn').classList.toggle('hidden', up));
   /** Whether this page has shown someone their sign-ins yet (it greets a newcomer once). */
-  let signInsGreeted = false;
   net.onMessage((msg) => ctx.messages.dispatch(msg));
   /** The floor you asked to come back to (see Net.connect), to tell if the office put you somewhere else. */
   let wasOn: string | null = null;
@@ -152,13 +151,7 @@ export function installArrival(ctx: Ctx, core: CoreState, parts: ArrivalParts) {
     }
     parts.maps.offTheRoof();
   });
-  ctx.messages.on('signins', () => {
-    // Someone who just joined starts here: their workers need their own Claude sign-in first.
-    if (!signInsGreeted) {
-      signInsGreeted = true;
-      if (needsSigningIn()) openSignIns(net, 'Welcome! Sign in to Claude so the workers you hire run on your own plan, and to GitHub so what you do on the boards is yours.');
-    }
-  });
+  // Sign-in state paints the HUD warning; only an action that actually needs it opens the modal.
   ctx.messages.on('signins.needed', (msg) => openSignIns(net, msg.why));
   ctx.messages.on('toast', (msg) => toast(msg.text, msg.level));
 

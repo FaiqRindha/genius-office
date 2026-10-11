@@ -247,7 +247,7 @@ test('a new store starts every field where it always has', async () => {
       sky: null, theme: { pick: 'auto', active: null }, prompts: { custom: {} }, leaveOnMerge: { on: false }, map: { pick: 'office', custom: [] },
       meeting: { current: null, past: [] }, decor: [], floorPlan: EMPTY_PLAN, services: { items: [], port: 4600 },
       dog: null, dogStart: 0, jukebox: { on: false, track: JUKEBOX_TUNES[0].id, startedAt: 0, elapsed: 0, since: 0 }, clock: '<undefined>',
-      whiteboard: [], drawing: [], cabinet: { player: null, scores: [] }, cabinetFrame: null, ball: {}, campus: { buildings: [] },
+      whiteboard: [], drawing: [], cabinet: { player: null, scores: [] }, cabinetFrame: null, ball: {}, campus: { buildings: [], campus: [] },
       cars: parked(), carsAt: [], jail: { prisoners: [], bones: 0 },
       team: null, accounts: null, signins: null,
     },

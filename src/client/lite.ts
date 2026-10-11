@@ -96,12 +96,13 @@ function offTheRoof() {
 function renderBuildingReader() {
   const el = $('building-reader');
   el.replaceChildren();
-  const selected = store.campus.buildings.find((building) => building.id === store.campus.selected);
-  if (!selected) return el.classList.add('hidden');
+  if (!store.campus.campus.length) return el.classList.add('hidden');
   el.classList.remove('hidden');
-  const label = selected.access === 'granted' ? 'Access granted' : selected.access === 'scanning' ? 'Scanning…' : selected.access === 'locked' ? 'Locked' : 'Access denied';
-  const tap = h('button.btn.lite-go', { type: 'button', onclick: () => net.send({ t: 'building.select', buildingId: selected.id }) }, `💳 ${label}`, h('span', { 'aria-hidden': 'true' }, selected.name));
-  el.append(tap);
+  for (const building of store.campus.campus) {
+    const label = building.access === 'granted' ? 'Access granted' : building.access === 'scanning' ? 'Scanning…' : building.access === 'locked' ? 'Locked' : 'Access denied';
+    const tap = h('button.btn.lite-go', { type: 'button', disabled: building.access === 'scanning', onclick: () => net.send({ t: 'building.select', buildingId: building.id }) }, `💳 ${label}`, h('span', { 'aria-hidden': 'true' }, building.name));
+    el.append(tap);
+  }
 }
 store.on('campus', renderBuildingReader);
 

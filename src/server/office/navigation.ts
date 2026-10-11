@@ -9,7 +9,9 @@ import { floorView, roofView, screensOf } from './views.js';
 
 /** Taking people between the floors, the roof and the lobby. */
 export function navigation(ctx: Ctx): Navigation {
-  const peersHere = (c: Client) => [...ctx.clients.values()].filter((o) => o.buildingId === c.buildingId).map((o) => o.peer);
+  // Every browser keeps the campus roster. The client renders only its own room, but this lets a
+  // player walking back outside immediately see everyone else on the campus.
+  const peersHere = (_c: Client) => [...ctx.clients.values()].map((o) => o.peer);
   /**
    * Takes `c` to another floor: everyone sees them leave and arrive, and they get the new floor's
    * everything. They arrive in the elevator, or `at` the spot they came by.

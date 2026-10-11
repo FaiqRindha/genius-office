@@ -2,7 +2,7 @@ import type { Net } from '../net';
 import { store } from '../state';
 import { h, openModal } from './dom';
 
-/** Campus lobby: only server-authorized buildings are ever rendered here. */
+/** Campus lobby: every exterior is visible; the server decides whether its door opens. */
 export function openBuildings(net: Net) {
   const body = h('div.body');
   const close = h('button.btn.close', { 'aria-label': 'Close' }, '✕');
@@ -11,12 +11,19 @@ export function openBuildings(net: Net) {
   close.addEventListener('click', () => modal.close());
   const render = () => {
     body.replaceChildren();
-    if (!store.campus.buildings.length) body.append(h('p.empty', {}, 'No buildings are available for this account.'));
-    for (const building of store.campus.buildings) {
+    if (!store.campus.campus.length) body.append(h('p.empty', {}, 'No buildings have been created yet.'));
+    const memberships = new Map(store.campus.buildings.map((building) => [building.id, building]));
+    for (const building of store.campus.campus) {
+      const membership = memberships.get(building.id);
       const chosen = building.id === store.campus.selected;
       const enter = h('button.btn.primary', { type: 'button', disabled: building.access === 'scanning' }, chosen ? 'Current building' : building.access === 'scanning' ? 'Scanning…' : 'Tap ID card');
       enter.addEventListener('click', () => net.send({ t: 'building.select', buildingId: building.id }));
-      body.append(h('section.card', {}, h('h3', {}, building.name), h('p.note', {}, `${building.role} · ${building.access}`), enter));
+      body.append(h('section.card', {}, h('h3', {}, building.name), h('p.note', {}, `${membership?.role ?? 'no membership'} · ${building.access}`), enter));
+    }
+    if (store.campus.selected) {
+      const leave = h('button.btn', { type: 'button' }, 'Return to campus');
+      leave.addEventListener('click', () => net.send({ t: 'building.leave' }));
+      body.append(leave);
     }
     if (store.campus.selected && store.campus.members) {
       const accountId = h('input', { type: 'text', placeholder: 'Account ID', maxlength: 32, 'aria-label': 'Account ID to add' }) as HTMLInputElement;

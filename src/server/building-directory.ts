@@ -16,6 +16,7 @@ export class BuildingDirectory {
   private data: Saved = { version: 1, buildings: [], audit: [] };
   constructor(private readonly legacyDataDir: string) { this.file = path.join(legacyDataDir, 'buildings.json'); this.root = path.join(legacyDataDir, 'buildings'); this.load(); }
   get(id: string) { return this.data.buildings.find((b) => b.id === id); }
+  list() { return this.data.buildings; }
   visibleTo(accountId?: string) { return accountId ? this.data.buildings.filter((b) => this.roleOf(b.id, accountId)) : []; }
   roleOf(id: string, accountId?: string): BuildingRole | undefined { return accountId ? this.get(id)?.members.find((m) => m.accountId === accountId)?.role : undefined; }
   access(id: string, accountId?: string): BuildingAccessState { return accountId ? (this.roleOf(id, accountId) ? 'granted' : 'denied') : 'locked'; }

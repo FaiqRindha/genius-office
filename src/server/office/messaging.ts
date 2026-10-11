@@ -43,7 +43,7 @@ export function messaging(ctx: Ctx): Messaging {
     if (!c.peer.floor) return;
     const json = JSON.stringify(msg);
     for (const o of ctx.clients.values()) {
-      if (o.id === c.id || o.peer.floor !== c.peer.floor || o.ws.readyState !== WebSocket.OPEN) continue;
+      if (o.id === c.id || o.buildingId !== c.buildingId || o.peer.floor !== c.peer.floor || o.ws.readyState !== WebSocket.OPEN) continue;
       if (droppable && o.ws.bufferedAmount > 4 * 1024 * 1024) continue;
       o.ws.send(json);
     }

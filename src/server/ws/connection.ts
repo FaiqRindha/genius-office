@@ -30,16 +30,16 @@ export function onConnection(ctx: Ctx, ws: WebSocket, url: URL, session: Session
     if (account.role === 'admin') ctx.buildingDirectory.migrateLegacy(account.id, account.name);
     privateBuilding = ctx.buildingDirectory.ensurePrivate(account.id, account.name).id;
   }
-  // Every named account starts in its own private building, including an office admin. The legacy
-  // shared-password lobby stays on default without a private-building capability.
-  const selectedBuilding = account ? privateBuilding : 'default';
+  // Until the campus scene owns its own spawn point, a named account arrives at its own elevator.
+  // shortcut: the shared exterior renderer must land before named accounts can spawn outside.
+  const selectedBuilding: string | undefined = account ? privateBuilding : 'default';
   // A bookmarked floor is accepted only when it belongs to the member's selected building.
   const wanted = url.searchParams.get('floor');
   const wantedFloor = wanted && wanted !== ROOF ? floors.get(wanted) : undefined;
-  const gone = !!wanted && wanted !== ROOF && (!wantedFloor || !ctx.buildingAccess.ownsFloor(selectedBuilding, wantedFloor.def));
-  const hasFloors = floorInfos(selectedBuilding).some((item) => !item.cloning);
-  const onRoof = (wanted === ROOF || gone) && hasFloors;
-  const floor = onRoof ? undefined : arrivalFloor(wanted, selectedBuilding);
+  const gone = !!wanted && wanted !== ROOF && (!wantedFloor || !selectedBuilding || !ctx.buildingAccess.ownsFloor(selectedBuilding, wantedFloor.def));
+  const hasFloors = selectedBuilding && floorInfos(selectedBuilding).some((item) => !item.cloning);
+  const onRoof = !!selectedBuilding && (wanted === ROOF || gone) && !!hasFloors;
+  const floor = selectedBuilding && !onRoof ? arrivalFloor(wanted, selectedBuilding) : undefined;
   const back = !gone && wanted !== null && (onRoof || floor?.id === wanted);
   const spot = (back && spotFrom(url.searchParams)) || { ...elevatorSpot(), y: 0, rotY: 0 };
   // An account's name is its own; on the shared password people pick one.
@@ -66,6 +66,7 @@ export function onConnection(ctx: Ctx, ws: WebSocket, url: URL, session: Session
     ...(onRoof ? { floor: ROOF } : floor ? { floor: floor.id } : {}),
   });
   client.buildingId = selectedBuilding;
+  if (selectedBuilding) client.peer.buildingId = selectedBuilding;
   // Maps of your own may have been added or edited since: everyone already in hears first.
   const mapWas = maps.pick();
   if (maps.reload()) mapNews(ctx, mapWas);
@@ -76,8 +77,8 @@ export function onConnection(ctx: Ctx, ws: WebSocket, url: URL, session: Session
   sendTo(client, {
     t: 'welcome',
     you: id,
-    peers: [...clients.values()].filter((c) => c.buildingId === client.buildingId).map((c) => c.peer),
-    floors: floorInfos(client.buildingId),
+    peers: [...clients.values()].map((c) => c.peer),
+    floors: floorInfos(selectedBuilding),
     projectsDir: building.projectsDirState(),
     ice: cfg.iceServers,
     chat: chat.recent(50),
@@ -98,7 +99,7 @@ export function onConnection(ctx: Ctx, ws: WebSocket, url: URL, session: Session
     ...(onRoof ? roofView(ctx) : floorView(ctx, floor)),
   });
   screensOf(ctx, client, floor);
-  ctx.toBuilding(client.buildingId, { t: 'peer.join', peer: client.peer }, id);
+  ctx.broadcast({ t: 'peer.join', peer: client.peer }, id);
   if (account) accountsChanged(); // now online
   floorsChanged();
   if (floor) {
@@ -127,7 +128,7 @@ export function onConnection(ctx: Ctx, ws: WebSocket, url: URL, session: Session
     // Each feature lets go of what they had (see FeatureHooks), then of what they had on each floor.
     for (const f of features) f.closed?.(ctx, client);
     for (const floor of floors.values()) for (const f of features) f.closedOn?.(ctx, client, floor);
-    ctx.toBuilding(client.buildingId, { t: 'peer.leave', id });
+    ctx.broadcast({ t: 'peer.leave', id });
     if (account) accountsChanged();
     floorsChanged();
   });

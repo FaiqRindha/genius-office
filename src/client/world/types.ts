@@ -49,6 +49,8 @@ export interface Interactable {
   pole?: number;
   /** Which of CARS (shared/garage.ts), for a car. */
   car?: number;
+  /** The campus building whose exterior reader this is. */
+  buildingId?: string;
   /** Put away for now (a bean bag nobody needs yet): can't be used. */
   off?: boolean;
   /** What the hint calls it, where a map's own looks differ from the office's (the castle's ale for the coffee machine). */
