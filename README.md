@@ -306,6 +306,8 @@ For HTTPS on your own domain, point a DNS record at the server and add `bash -s 
 
 ## Add users
 
+Named accounts are provisioned with a private campus building on their first sign-in. See [self-hosting](docs/self-hosting.md#campus-buildings) for the persisted directory and migration behavior.
+
 Everyone gets their own account, so their name is on their character, in chat and on every terminal they type into.
 
 **1. On a server, let them in first.** On a [Tailscale](docs/aws.md#tailscale) office, everyone on your tailnet can already open it. For someone who isn't, share the machine with them from Tailscale's Machines page: **☰ → 👥 Invite teammates** says how. Skip to step 2.

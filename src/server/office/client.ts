@@ -12,6 +12,8 @@ export interface Client {
   peer: PeerInfo;
   /** Signed in with this account; none means the shared office password. */
   accountId?: string;
+  /** The building this browser selected after the server checked its membership. */
+  buildingId?: string;
   /** Whether this person was last told they're an admin (see `me`). */
   admin: boolean;
   /** Signed out while connected; whatever it still sends is dropped until the socket closes. */

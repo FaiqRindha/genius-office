@@ -1,5 +1,9 @@
 # Run it on a server for your team
 
+## Campus buildings
+
+Named accounts receive a private building on first sign-in. The membership directory is stored in `.agent-office/buildings.json`; private buildings have isolated `data` and `workspace` roots under `.agent-office/buildings/`. Existing office data is registered as the `default` building when the first named administrator signs in, without moving or deleting project checkouts.
+
 Any Ubuntu or Debian server, with one line, or set up by hand behind Caddy or nginx. Back to the [README](../README.md).
 
 Run this on any Ubuntu or Debian server, as root or as a user with sudo:

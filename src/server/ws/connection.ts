@@ -32,6 +32,12 @@ export function onConnection(ctx: Ctx, ws: WebSocket, url: URL, session: Session
   const back = !gone && wanted !== null && (onRoof || floor?.id === wanted);
   const spot = (back && spotFrom(url.searchParams)) || { ...elevatorSpot(), y: 0, rotY: 0 };
   const account = session.account;
+  // A private building is provisioned only for named accounts. The legacy office remains in place
+  // and receives a default record once a named administrator can own it.
+  if (account) {
+    if (account.role === 'admin') ctx.buildingDirectory.migrateLegacy(account.id, account.name);
+    ctx.buildingDirectory.ensurePrivate(account.id, account.name);
+  }
   // An account's name is its own; on the shared password people pick one.
   const name = account?.name ?? (str(url.searchParams.get('name'), 24).trim() || `Guest ${id.slice(0, 3)}`);
   const colorParam = url.searchParams.get('color') ?? '';
