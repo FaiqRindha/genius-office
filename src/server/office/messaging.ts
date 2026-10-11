@@ -17,6 +17,14 @@ export function messaging(ctx: Ctx): Messaging {
       c.ws.send(json);
     }
   };
+  const toBuilding = (buildingId: string | undefined, msg: ServerMsg, except?: string, droppable = false) => {
+    const json = JSON.stringify(msg);
+    for (const c of ctx.clients.values()) {
+      if (c.id === except || c.buildingId !== buildingId || c.ws.readyState !== WebSocket.OPEN) continue;
+      if (droppable && c.ws.bufferedAmount > 4 * 1024 * 1024) continue;
+      c.ws.send(json);
+    }
+  };
   const toastAll = (text: string, level: ToastLevel = 'info') => broadcast({ t: 'toast', text, level });
   /** To everyone on one floor. */
   const toFloor = (floor: Floor, msg: ServerMsg, droppable = false) => {
@@ -44,5 +52,5 @@ export function messaging(ctx: Ctx): Messaging {
   const warn = (c: Client, error: string | undefined) => {
     if (error) sendTo(c, { t: 'toast', text: error, level: 'warn' });
   };
-  return { sendTo, broadcast, toastAll, toFloor, toastFloor, toNeighbors, warn };
+  return { sendTo, broadcast, toBuilding, toastAll, toFloor, toastFloor, toNeighbors, warn };
 }

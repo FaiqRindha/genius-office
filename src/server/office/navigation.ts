@@ -9,6 +9,7 @@ import { floorView, roofView, screensOf } from './views.js';
 
 /** Taking people between the floors, the roof and the lobby. */
 export function navigation(ctx: Ctx): Navigation {
+  const peersHere = (c: Client) => [...ctx.clients.values()].filter((o) => o.buildingId === c.buildingId).map((o) => o.peer);
   /**
    * Takes `c` to another floor: everyone sees them leave and arrive, and they get the new floor's
    * everything. They arrive in the elevator, or `at` the spot they came by.
@@ -17,7 +18,7 @@ export function navigation(ctx: Ctx): Navigation {
     if (c.peer.floor === floor.id) return;
     const left = leave(c, at);
     Object.assign(c.peer, { floor: floor.id });
-    ctx.sendTo(c, { t: 'floor.enter', peers: [...ctx.clients.values()].map((o) => o.peer), ...floorView(ctx, floor) });
+    ctx.sendTo(c, { t: 'floor.enter', peers: peersHere(c), ...floorView(ctx, floor) });
     screensOf(ctx, c, floor);
     arrived(c, left);
     floor.arrived();
@@ -30,7 +31,7 @@ export function navigation(ctx: Ctx): Navigation {
     if (c.peer.floor === ROOF) return;
     const left = leave(c);
     c.peer.floor = ROOF;
-    ctx.sendTo(c, { t: 'floor.enter', peers: [...ctx.clients.values()].map((o) => o.peer), ...roofView(ctx) });
+    ctx.sendTo(c, { t: 'floor.enter', peers: peersHere(c), ...roofView(ctx) });
     arrived(c, left);
     ctx.floorsChanged();
   };
@@ -39,7 +40,7 @@ export function navigation(ctx: Ctx): Navigation {
   const toLobby = (c: Client) => {
     const left = leave(c);
     delete c.peer.floor;
-    ctx.sendTo(c, { t: 'floor.enter', peers: [...ctx.clients.values()].map((o) => o.peer), ...floorView(ctx, undefined) });
+    ctx.sendTo(c, { t: 'floor.enter', peers: peersHere(c), ...floorView(ctx, undefined) });
     arrived(c, left);
   };
 
@@ -61,7 +62,7 @@ export function navigation(ctx: Ctx): Navigation {
   };
 
   const arrived = (c: Client, after: ReturnType<typeof leave>) => {
-    ctx.broadcast({ t: 'peer.update', peer: c.peer }, c.id);
+    ctx.toBuilding(c.buildingId, { t: 'peer.update', peer: c.peer }, c.id);
     for (const then of after) then();
   };
 

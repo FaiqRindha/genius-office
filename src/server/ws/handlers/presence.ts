@@ -27,13 +27,13 @@ export const presenceHandlers = {
       if (drink === c.peer.drink) return;
       if (drink) c.peer.drink = drink;
       else delete c.peer.drink;
-      ctx.broadcast({ t: 'peer.act', id: c.id, drink: drink ?? null }, c.id, true);
+      ctx.toBuilding(c.buildingId, { t: 'peer.act', id: c.id, drink: drink ?? null }, c.id, true);
       return;
     }
     if (typeof msg.smoke === 'boolean') {
       if (msg.smoke === !!c.peer.smoking) return;
       c.peer.smoking = msg.smoke;
-      ctx.broadcast({ t: 'peer.act', id: c.id, smoke: msg.smoke }, c.id, true);
+      ctx.toBuilding(c.buildingId, { t: 'peer.act', id: c.id, smoke: msg.smoke }, c.id, true);
       return;
     }
     if (typeof msg.golf === 'boolean') {
@@ -42,7 +42,7 @@ export const presenceHandlers = {
       if (golf === !!c.peer.golfing) return;
       if (golf) c.peer.golfing = true;
       else delete c.peer.golfing;
-      ctx.broadcast({ t: 'peer.act', id: c.id, golf }, c.id, true);
+      ctx.toBuilding(c.buildingId, { t: 'peer.act', id: c.id, golf }, c.id, true);
       return;
     }
     if (msg.throwing !== undefined) {
@@ -51,7 +51,7 @@ export const presenceHandlers = {
       if (game === c.peer.throwing) return;
       if (game) c.peer.throwing = game;
       else delete c.peer.throwing;
-      ctx.broadcast({ t: 'peer.act', id: c.id, throwing: game ?? null }, c.id, true);
+      ctx.toBuilding(c.buildingId, { t: 'peer.act', id: c.id, throwing: game ?? null }, c.id, true);
       return;
     }
     if (!throttle(c, 'act', 100)) return;
@@ -76,7 +76,7 @@ export const presenceHandlers = {
     }
     if (seat) c.peer.seat = seat;
     else delete c.peer.seat;
-    ctx.broadcast({ t: 'peer.update', peer: c.peer }, c.id);
+    ctx.toBuilding(c.buildingId, { t: 'peer.update', peer: c.peer }, c.id);
   },
   carry(ctx, c, msg) {
     // Everyone on the floor sees the issue card in their hands, and whoever comes in later too.
@@ -84,20 +84,20 @@ export const presenceHandlers = {
     if (issue === c.peer.carrying?.issue) return;
     if (issue !== undefined) c.peer.carrying = { issue, title: str(msg.title, 200) };
     else delete c.peer.carrying;
-    ctx.broadcast({ t: 'peer.update', peer: c.peer }, c.id);
+    ctx.toBuilding(c.buildingId, { t: 'peer.update', peer: c.peer }, c.id);
   },
   profile(ctx, c, msg) {
     const name = str(msg.name, 24).trim();
     if (name && !c.accountId) c.peer.name = name;
     if (COLOR_RE.test(msg.color)) c.peer.color = msg.color;
     c.peer.look = sanitizeLook(msg.look, c.peer.look);
-    ctx.broadcast({ t: 'peer.update', peer: c.peer });
+    ctx.toBuilding(c.buildingId, { t: 'peer.update', peer: c.peer });
   },
   voice(ctx, c, msg) {
     c.peer.voice = !!msg.voice;
     c.peer.muted = !!msg.muted;
     c.peer.sharing = !!msg.sharing;
-    ctx.broadcast({ t: 'peer.update', peer: c.peer });
+    ctx.toBuilding(c.buildingId, { t: 'peer.update', peer: c.peer });
   },
   rtc(ctx, c, msg) {
     const target = ctx.clients.get(str(msg.to, 32));
@@ -119,7 +119,7 @@ export const presenceHandlers = {
     else delete c.peer.doing;
     if (reading) c.peer.reading = true;
     else delete c.peer.reading;
-    ctx.broadcast({ t: 'peer.update', peer: c.peer });
+    ctx.toBuilding(c.buildingId, { t: 'peer.update', peer: c.peer });
   },
   ping(ctx, c, msg) {
     ctx.sendTo(c, { t: 'pong', at: num(msg.at), now: Date.now() });

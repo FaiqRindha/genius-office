@@ -20,7 +20,7 @@ import { buildingState } from './handlers/building.js';
  */
 export function onConnection(ctx: Ctx, ws: WebSocket, url: URL, session: Session) {
   const { cfg, accounts, clients, chat, building, floors, maps, team, upgrader, ledger, webhook, machine, sky, themes, prompts, leaveOnMerge, signins } = ctx;
-  const { sendTo, broadcast, floorInfos, floorsChanged, arrivalFloor, meOf, accountsChanged, limitsOf } = ctx;
+  const { sendTo, floorInfos, floorsChanged, arrivalFloor, meOf, accountsChanged, limitsOf } = ctx;
   const id = randomBytes(5).toString('hex');
   const account = session.account;
   // A private building is provisioned only for named accounts. The legacy office remains in place
@@ -77,7 +77,7 @@ export function onConnection(ctx: Ctx, ws: WebSocket, url: URL, session: Session
   sendTo(client, {
     t: 'welcome',
     you: id,
-    peers: [...clients.values()].map((c) => c.peer),
+    peers: [...clients.values()].filter((c) => c.buildingId === client.buildingId).map((c) => c.peer),
     floors: floorInfos(client.buildingId),
     projectsDir: building.projectsDirState(),
     ice: cfg.iceServers,
@@ -99,7 +99,7 @@ export function onConnection(ctx: Ctx, ws: WebSocket, url: URL, session: Session
     ...(onRoof ? roofView(ctx) : floorView(ctx, floor)),
   });
   screensOf(ctx, client, floor);
-  broadcast({ t: 'peer.join', peer: client.peer }, id);
+  ctx.toBuilding(client.buildingId, { t: 'peer.join', peer: client.peer }, id);
   if (account) accountsChanged(); // now online
   floorsChanged();
   if (floor) {
@@ -128,7 +128,7 @@ export function onConnection(ctx: Ctx, ws: WebSocket, url: URL, session: Session
     // Each feature lets go of what they had (see FeatureHooks), then of what they had on each floor.
     for (const f of features) f.closed?.(ctx, client);
     for (const floor of floors.values()) for (const f of features) f.closedOn?.(ctx, client, floor);
-    broadcast({ t: 'peer.leave', id });
+    ctx.toBuilding(client.buildingId, { t: 'peer.leave', id });
     if (account) accountsChanged();
     floorsChanged();
   });

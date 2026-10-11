@@ -101,6 +101,8 @@ export interface LateServices {
 export interface Messaging {
   sendTo(c: Client, msg: ServerMsg): void;
   broadcast(msg: ServerMsg, except?: string, droppable?: boolean): void;
+  /** To browsers currently in one campus building. */
+  toBuilding(buildingId: string | undefined, msg: ServerMsg, except?: string, droppable?: boolean): void;
   toastAll(text: string, level?: ToastLevel): void;
   /** To everyone on one floor. */
   toFloor(floor: Floor, msg: ServerMsg, droppable?: boolean): void;
