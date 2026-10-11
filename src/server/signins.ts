@@ -452,7 +452,7 @@ export class SignIns {
     const onData = (d: Buffer) => {
       out = (out + d.toString('utf8')).slice(-20_000);
       if (l.flows.github !== flow || l.github.pending?.code) return;
-      const code = /one-time code:\s*([A-Z0-9]{4}-[A-Z0-9]{4})/i.exec(out)?.[1];
+      const code = /one-time code\s*(?:\(|:)\s*([A-Z0-9]{4}-[A-Z0-9]{4})/i.exec(out)?.[1];
       if (!code) return;
       const url = /https:\/\/github\.com\/login\/device\S*/.exec(out)?.[0] ?? 'https://github.com/login/device';
       l.github = { status: 'busy', pending: { url, code } };

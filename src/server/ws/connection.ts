@@ -23,17 +23,16 @@ export function onConnection(ctx: Ctx, ws: WebSocket, url: URL, session: Session
   const { sendTo, floorInfos, floorsChanged, arrivalFloor, meOf, accountsChanged, limitsOf } = ctx;
   const id = randomBytes(5).toString('hex');
   const account = session.account;
-  // A private building is provisioned only for named accounts. The legacy office remains in place
-  // and receives a default record once a named administrator can own it.
+  // A private building is provisioned only for named accounts. The legacy office becomes the
+  // first administrator's own building, so it does not add a separate campus card.
   let privateBuilding: string | undefined;
   if (account) {
     if (account.role === 'admin') ctx.buildingDirectory.migrateLegacy(account.id, account.name);
     privateBuilding = ctx.buildingDirectory.ensurePrivate(account.id, account.name).id;
   }
-  // The legacy shared-password lobby stays on the migrated default floor, but it has no
-  // membership capability: all mutations remain locked by BuildingAccess. Named users select
-  // their own private building (or the default campus building when they are its administrator).
-  const selectedBuilding = account ? (account.role === 'admin' ? 'default' : privateBuilding) : 'default';
+  // Every named account starts in its own private building, including an office admin. The legacy
+  // shared-password lobby stays on default without a private-building capability.
+  const selectedBuilding = account ? privateBuilding : 'default';
   // A bookmarked floor is accepted only when it belongs to the member's selected building.
   const wanted = url.searchParams.get('floor');
   const wantedFloor = wanted && wanted !== ROOF ? floors.get(wanted) : undefined;

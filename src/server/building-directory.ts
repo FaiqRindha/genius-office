@@ -19,11 +19,17 @@ export class BuildingDirectory {
   visibleTo(accountId?: string) { return accountId ? this.data.buildings.filter((b) => this.roleOf(b.id, accountId)) : []; }
   roleOf(id: string, accountId?: string): BuildingRole | undefined { return accountId ? this.get(id)?.members.find((m) => m.accountId === accountId)?.role : undefined; }
   access(id: string, accountId?: string): BuildingAccessState { return accountId ? (this.roleOf(id, accountId) ? 'granted' : 'denied') : 'locked'; }
-  ensurePrivate(accountId: string, displayName: string) { return this.data.buildings.find((b) => b.ownerId === accountId && b.id !== 'default') ?? this.create(accountId, displayName); }
+  ensurePrivate(accountId: string, displayName: string) { return this.data.buildings.find((b) => b.ownerId === accountId) ?? this.create(accountId, displayName); }
   migrateLegacy(ownerId: string, ownerName: string) {
-    const old = this.get('default'); if (old) return old;
+    const old = this.get('default');
+    if (old) {
+      if (old.ownerId !== ownerId) return old;
+      // The legacy office is the first administrator's building, not an extra campus building.
+      if (old.name === 'Default building') { old.name = `${clean(ownerName) || 'Private'}'s building`; this.save(); }
+      return old;
+    }
     const now = Date.now();
-    const building: BuildingRecord = { id: 'default', name: 'Default building', ownerId, createdAt: now, dataDir: this.legacyDataDir, workspaceDir: path.resolve(this.legacyDataDir, '..'), template: 'office', members: [{ accountId: ownerId, role: 'owner', addedAt: now, addedBy: ownerName }] };
+    const building: BuildingRecord = { id: 'default', name: `${clean(ownerName) || 'Private'}'s building`, ownerId, createdAt: now, dataDir: this.legacyDataDir, workspaceDir: path.resolve(this.legacyDataDir, '..'), template: 'office', members: [{ accountId: ownerId, role: 'owner', addedAt: now, addedBy: ownerName }] };
     this.data.buildings.push(building); this.note(building.id, ownerId, 'created'); this.save(); return building;
   }
   addMember(id: string, actorId: string, accountId: string, role: Exclude<BuildingRole, 'owner'>): string | undefined { const b = this.manageable(id, actorId); if (typeof b === 'string') return b; if (b.members.some((m) => m.accountId === accountId)) return 'That account is already a member'; b.members.push({ accountId, role, addedAt: Date.now(), addedBy: actorId }); this.note(id, actorId, 'member.added', accountId, role); this.save(); }
