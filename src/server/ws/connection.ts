@@ -12,6 +12,7 @@ import { floorView, roofView, screensOf } from '../office/views.js';
 import { dispatch } from './dispatch.js';
 import { features } from './handlers/index.js';
 import { mapNews } from './handlers/settings.js';
+import { buildingState } from './handlers/building.js';
 
 /**
  * Someone came in: where they arrive and who they are, the welcome with everything they see, and
@@ -21,23 +22,27 @@ export function onConnection(ctx: Ctx, ws: WebSocket, url: URL, session: Session
   const { cfg, accounts, clients, chat, building, floors, maps, team, upgrader, ledger, webhook, machine, sky, themes, prompts, leaveOnMerge, signins } = ctx;
   const { sendTo, broadcast, floorInfos, floorsChanged, arrivalFloor, meOf, accountsChanged, limitsOf } = ctx;
   const id = randomBytes(5).toString('hex');
-  // Back on the floor they were on before a reload, a restart or closing the tab, else the first floor.
-  const wanted = url.searchParams.get('floor');
-  // Their floor's gone since (taken off the building, or its checkout deleted): up to the roof instead.
-  const gone = !!wanted && wanted !== ROOF && !floors.has(wanted);
-  // Up on the roof, as long as there's a building under it.
-  const onRoof = (wanted === ROOF || gone) && floors.size > 0;
-  const floor = onRoof ? undefined : arrivalFloor(wanted);
-  // Back where they were standing on it too; anywhere else, they arrive by elevator.
-  const back = !gone && wanted !== null && (onRoof || floor?.id === wanted);
-  const spot = (back && spotFrom(url.searchParams)) || { ...elevatorSpot(), y: 0, rotY: 0 };
   const account = session.account;
   // A private building is provisioned only for named accounts. The legacy office remains in place
   // and receives a default record once a named administrator can own it.
+  let privateBuilding: string | undefined;
   if (account) {
     if (account.role === 'admin') ctx.buildingDirectory.migrateLegacy(account.id, account.name);
-    ctx.buildingDirectory.ensurePrivate(account.id, account.name);
+    privateBuilding = ctx.buildingDirectory.ensurePrivate(account.id, account.name).id;
   }
+  // The legacy shared-password lobby stays on the migrated default floor, but it has no
+  // membership capability: all mutations remain locked by BuildingAccess. Named users select
+  // their own private building (or the default campus building when they are its administrator).
+  const selectedBuilding = account ? (account.role === 'admin' ? 'default' : privateBuilding) : 'default';
+  // A bookmarked floor is accepted only when it belongs to the member's selected building.
+  const wanted = url.searchParams.get('floor');
+  const wantedFloor = wanted && wanted !== ROOF ? floors.get(wanted) : undefined;
+  const gone = !!wanted && wanted !== ROOF && (!wantedFloor || !ctx.buildingAccess.ownsFloor(selectedBuilding, wantedFloor.def));
+  const hasFloors = floorInfos(selectedBuilding).some((item) => !item.cloning);
+  const onRoof = (wanted === ROOF || gone) && hasFloors;
+  const floor = onRoof ? undefined : arrivalFloor(wanted, selectedBuilding);
+  const back = !gone && wanted !== null && (onRoof || floor?.id === wanted);
+  const spot = (back && spotFrom(url.searchParams)) || { ...elevatorSpot(), y: 0, rotY: 0 };
   // An account's name is its own; on the shared password people pick one.
   const name = account?.name ?? (str(url.searchParams.get('name'), 24).trim() || `Guest ${id.slice(0, 3)}`);
   const colorParam = url.searchParams.get('color') ?? '';
@@ -61,6 +66,7 @@ export function onConnection(ctx: Ctx, ws: WebSocket, url: URL, session: Session
     ...(url.searchParams.get('lite') === '1' ? { lite: true } : {}),
     ...(onRoof ? { floor: ROOF } : floor ? { floor: floor.id } : {}),
   });
+  client.buildingId = selectedBuilding;
   // Maps of your own may have been added or edited since: everyone already in hears first.
   const mapWas = maps.pick();
   if (maps.reload()) mapNews(ctx, mapWas);
@@ -72,7 +78,7 @@ export function onConnection(ctx: Ctx, ws: WebSocket, url: URL, session: Session
     t: 'welcome',
     you: id,
     peers: [...clients.values()].map((c) => c.peer),
-    floors: floorInfos(),
+    floors: floorInfos(client.buildingId),
     projectsDir: building.projectsDirState(),
     ice: cfg.iceServers,
     chat: chat.recent(50),
@@ -89,6 +95,7 @@ export function onConnection(ctx: Ctx, ws: WebSocket, url: URL, session: Session
     map: maps.state(),
     prompts: prompts.state(),
     leaveOnMerge: leaveOnMerge.state(),
+    building: buildingState(ctx, account?.id, client.buildingId),
     ...(onRoof ? roofView(ctx) : floorView(ctx, floor)),
   });
   screensOf(ctx, client, floor);

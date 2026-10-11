@@ -9,15 +9,21 @@ import { SLOW_CLIENT_BYTES, type Client } from './client.js';
 
 /** Finding floors, the elevator's list of them, and taking one off the building. */
 export function floorHelpers(ctx: Ctx): FloorHelpers {
-  const floorOf = (c: Client): Floor | undefined => (c.peer.floor ? ctx.floors.get(c.peer.floor) : undefined);
+  // Never let an old URL, a stale socket, or a client message reach a floor belonging
+  // to a different campus building.  Most feature handlers intentionally use this
+  // helper, making the boundary apply to boards, games, terminals, and decorations.
+  const floorOf = (c: Client): Floor | undefined => {
+    const floor = c.peer.floor ? ctx.floors.get(c.peer.floor) : undefined;
+    return floor && ctx.buildingAccess.ownsFloor(c.buildingId, floor.def) ? floor : undefined;
+  };
   /** The floor a worker sits on. Worker ids are unique across the building. */
   const workerFloor = (workerId: string): Floor | undefined => {
     for (const f of ctx.floors.values()) if (f.workers.get(workerId)) return f;
     return undefined;
   };
-  const floorInfos = (): FloorInfo[] => [
-    ...[...ctx.floors.values()].map((f) => ({ ...f.info(), ...(ctx.building.isLocal(f.id) ? { local: true } : {}) })),
-    ...ctx.building.pending().map((d) => ({ id: d.id, name: d.name, repo: d.repo, dir: d.dir, palette: d.palette, addedBy: d.addedBy, addedAt: d.addedAt, cloning: true, clone: ctx.building.cloneProgress(d.id), workers: 0, busy: 0, waiting: 0, people: 0, wing: 0 })),
+  const floorInfos = (buildingId = 'default'): FloorInfo[] => [
+    ...[...ctx.floors.values()].filter((f) => (f.def.buildingId ?? 'default') === buildingId).map((f) => ({ ...f.info(), ...(ctx.building.isLocal(f.id) ? { local: true } : {}) })),
+    ...ctx.building.pending().filter((d) => (d.buildingId ?? 'default') === buildingId).map((d) => ({ id: d.id, name: d.name, repo: d.repo, dir: d.dir, palette: d.palette, addedBy: d.addedBy, addedAt: d.addedAt, cloning: true, clone: ctx.building.cloneProgress(d.id), workers: 0, busy: 0, waiting: 0, people: 0, wing: 0 })),
   ];
   // The elevator's counts change with every worker update; tell everyone at most a few times a second.
   let floorsSent = '';
@@ -25,15 +31,15 @@ export function floorHelpers(ctx: Ctx): FloorHelpers {
   const floorsChanged = () => {
     floorsTimer ??= setTimeout(() => {
       floorsTimer = undefined;
-      const list = floorInfos();
-      const json = JSON.stringify(list);
-      if (json === floorsSent) return;
-      floorsSent = json;
-      ctx.broadcast({ t: 'floors', floors: list });
+      for (const c of ctx.clients.values()) ctx.sendTo(c, { t: 'floors', floors: floorInfos(c.buildingId) });
     }, 250);
   };
   /** Where someone arriving goes: the floor they asked for, else the first one there is. */
-  const arrivalFloor = (wanted: string | null): Floor | undefined => (wanted && ctx.floors.get(wanted)) || ctx.floors.values().next().value;
+  const arrivalFloor = (wanted: string | null, buildingId = 'default'): Floor | undefined => {
+    const requested = wanted ? ctx.floors.get(wanted) : undefined;
+    if (requested && ctx.buildingAccess.ownsFloor(buildingId, requested.def)) return requested;
+    return [...ctx.floors.values()].find((floor) => ctx.buildingAccess.ownsFloor(buildingId, floor.def));
+  };
 
   /**
    * Takes `floor` off the building (already out of floors.json): everyone on it rides the elevator to

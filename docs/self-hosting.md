@@ -4,6 +4,8 @@
 
 Named accounts receive a private building on first sign-in. The membership directory is stored in `.agent-office/buildings.json`; private buildings have isolated `data` and `workspace` roots under `.agent-office/buildings/`. Existing office data is registered as the `default` building when the first named administrator signs in, without moving or deleting project checkouts.
 
+Use **☰ → 🏢 Buildings** or the ID-card reader by the elevator to choose an accessible building. Only owners and admins can manage its members; member projects and worker activity use that building's workspace, while GitHub actions use the signed-in member's own GitHub login. Visitors have read-only entry. The legacy shared password continues to access only the migrated `default` building and cannot discover private buildings.
+
 Any Ubuntu or Debian server, with one line, or set up by hand behind Caddy or nginx. Back to the [README](../README.md).
 
 Run this on any Ubuntu or Debian server, as root or as a user with sudo:

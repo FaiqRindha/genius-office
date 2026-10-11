@@ -17,6 +17,8 @@ export interface FloorDef {
   palette: number;
   addedBy: string;
   addedAt: number;
+  /** Campus building that owns this project; records from before campus belong to default. */
+  buildingId?: string;
 }
 
 /** A projects folder picked in ⚙️ Settings (or with --projects), as projects-folder.json keeps it. */
@@ -280,16 +282,16 @@ export class Building {
    * checkout that's already where the clone would go is used as it is. `account` (whoever's adding it)
    * can stop the clone, as admins can.
    */
-  async add(input: string, by: string, started: (def: FloorDef) => void, account?: string): Promise<FloorDef | string> {
+  async add(input: string, by: string, started: (def: FloorDef) => void, account?: string, buildingId = 'default', projectsDir = this.projectsDir, gitEnv?: Record<string, string>): Promise<FloorDef | string> {
     const wanted = normalizeRepo(input);
     if (!wanted) return 'Pick a repository, or type it as owner/name';
-    if (this.defs.some((d) => sameRepo(d.repo, wanted))) return `${wanted} already has a floor`;
+    if (this.defs.some((d) => (d.buildingId ?? 'default') === buildingId && sameRepo(d.repo, wanted))) return `${wanted} already has a floor in this building`;
     if (this.cloning.has(wanted.toLowerCase())) return `${wanted} is already being cloned`;
     if (this.defs.length + this.cloning.size >= MAX_FLOORS) return `The building is full (${MAX_FLOORS} floors)`;
     // The office's own checkout, taken off before: it moves back in where it is, not into a second clone.
     const home = this.local;
     if (this.localOff && home && sameRepo(home.repo, wanted) && existsSync(home.dir)) {
-      const def = this.newDef(path.basename(home.dir), home.repo, home.dir, by);
+      const def = this.newDef(path.basename(home.dir), home.repo, home.dir, by, buildingId);
       started(def);
       this.defs.push(def);
       this.localId = def.id;
@@ -301,24 +303,24 @@ export class Building {
     let repo: string;
     let empty = false;
     try {
-      const view = JSON.parse(await gh(['repo', 'view', wanted, '--json', 'nameWithOwner,isEmpty'], this.dataDir, 30_000)) as { nameWithOwner?: string; isEmpty?: boolean };
+      const view = JSON.parse(await gh(['repo', 'view', wanted, '--json', 'nameWithOwner,isEmpty'], this.dataDir, 30_000, gitEnv)) as { nameWithOwner?: string; isEmpty?: boolean };
       repo = normalizeRepo(view.nameWithOwner) ?? wanted;
       empty = view.isEmpty === true;
     } catch (err) {
       return `Couldn't find ${wanted} on GitHub: ${(err as Error).message}`;
     }
     const key = repo.toLowerCase();
-    if (this.defs.some((d) => sameRepo(d.repo, repo))) return `${repo} already has a floor`;
+    if (this.defs.some((d) => (d.buildingId ?? 'default') === buildingId && sameRepo(d.repo, repo))) return `${repo} already has a floor in this building`;
     if (this.cloning.has(key)) return `${repo} is already being cloned`;
     const [owner, name] = repo.split('/');
-    const dest = path.join(this.projectsDir, owner, name);
+    const dest = path.join(projectsDir, owner, name);
     if (this.defs.some((d) => path.resolve(d.dir) === dest)) return `${dest} is already a floor`;
-    const def = this.newDef(name, repo, dest, by);
+    const def = this.newDef(name, repo, dest, by, buildingId);
     const pending: Pending = { def, owner: account, empty };
     this.cloning.set(key, pending);
     started(def);
     try {
-      const err = await this.clone(pending);
+      const err = await this.clone(pending, gitEnv);
       if (err) return err;
     } finally {
       this.cloning.delete(key);
@@ -330,7 +332,7 @@ export class Building {
   }
 
   /** Clones a floor on its way, or checks that what's already there is its repository. Resolves to an error, if any. */
-  private async clone(p: Pending): Promise<string | undefined> {
+  private async clone(p: Pending, gitEnv?: Record<string, string>): Promise<string | undefined> {
     const { dir: dest } = p.def;
     const repo = p.def.repo!;
     const there = checkoutAt(dest, repo, p.empty);
@@ -348,7 +350,7 @@ export class Building {
     } catch (err) {
       return `Couldn't make ${this.logsDir}: ${(err as Error).message}`;
     }
-    const run = await CloneRun.start(repo, dest, path.join(this.logsDir, `${repo.replace('/', '__')}.log`), { ...this.opts.clone, changed: () => this.cloneChanged?.() });
+    const run = await CloneRun.start(repo, dest, path.join(this.logsDir, `${repo.replace('/', '__')}.log`), { ...this.opts.clone, env: gitEnv, changed: () => this.cloneChanged?.() });
     if (typeof run === 'string') return run;
     p.run = run;
     this.saveClones();
@@ -369,7 +371,9 @@ export class Building {
   }
 
   /** Repositories the office's `gh` login can clone, most recently pushed first. */
-  async repos(refresh = false): Promise<RepoChoice[]> {
+  async repos(refresh = false, gitEnv?: Record<string, string>): Promise<RepoChoice[]> {
+    // Credentials are per Office account. Never serve another member's cached private list.
+    if (gitEnv) return listRepos(this.dataDir, gitEnv);
     const cached = this.repoCache;
     if (cached && !refresh && Date.now() - cached.at < REPOS_TTL_MS) return cached.repos;
     const repos = listRepos(this.dataDir);
@@ -381,7 +385,7 @@ export class Building {
     return repos;
   }
 
-  private newDef(name: string, repo: string | undefined, dir: string, by: string): FloorDef {
+  private newDef(name: string, repo: string | undefined, dir: string, by: string, buildingId = 'default'): FloorDef {
     const taken = new Set([...this.defs, ...this.pending()].map((d) => d.id));
     const base = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 32) || 'floor';
     let id = base;
@@ -390,7 +394,7 @@ export class Building {
     const used = new Set([...this.defs, ...this.pending()].map((d) => d.palette));
     const free = FLOOR_PALETTES.findIndex((_, i) => !used.has(i));
     const palette = free >= 0 ? free : (this.defs.length + this.cloning.size) % FLOOR_PALETTES.length;
-    return { id, name, repo, dir, palette, addedBy: by, addedAt: Date.now() };
+    return { id, name, repo, dir, palette, addedBy: by, addedAt: Date.now(), buildingId };
   }
 
   private load() {
@@ -551,7 +555,7 @@ function cloneHere(repo: string, dest: string): Promise<string | undefined> {
   });
 }
 
-async function listRepos(cwd: string): Promise<RepoChoice[]> {
+async function listRepos(cwd: string, env?: Record<string, string>): Promise<RepoChoice[]> {
   const out = await gh(
     [
       'api',
@@ -562,6 +566,7 @@ async function listRepos(cwd: string): Promise<RepoChoice[]> {
     ],
     cwd,
     90_000,
+    env,
   );
   const repos: RepoChoice[] = [];
   const seen = new Set<string>();

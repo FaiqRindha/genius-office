@@ -93,6 +93,18 @@ function offTheRoof() {
   if (to) net.send({ t: 'floor.go', floor: to.id });
 }
 
+function renderBuildingReader() {
+  const el = $('building-reader');
+  el.replaceChildren();
+  const selected = store.campus.buildings.find((building) => building.id === store.campus.selected);
+  if (!selected) return el.classList.add('hidden');
+  el.classList.remove('hidden');
+  const label = selected.access === 'granted' ? 'Access granted' : selected.access === 'scanning' ? 'Scanning…' : selected.access === 'locked' ? 'Locked' : 'Access denied';
+  const tap = h('button.btn.lite-go', { type: 'button', onclick: () => net.send({ t: 'building.select', buildingId: selected.id }) }, `💳 ${label}`, h('span', { 'aria-hidden': 'true' }, selected.name));
+  el.append(tap);
+}
+store.on('campus', renderBuildingReader);
+
 // ---- The floor you're on ------------------------------------------------------------------------
 const floorSelect = $('floor') as HTMLSelectElement;
 const floorLabel = (f: FloorInfo) => `${f.name}${f.cloning ? ` (${cloneLabel(f.clone)})` : f.waiting ? ` · 🙋 ${f.waiting}` : ''}`;

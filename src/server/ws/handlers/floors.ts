@@ -5,29 +5,38 @@ import { ROOF } from '../../../shared/rooftop.js';
 import { arrivalSpot, str } from '../../office/input.js';
 import type { HandlerMap, ViewPieces } from './types.js';
 
+const mayWork = (ctx: Parameters<HandlerMap<FloorClientMsg>[keyof HandlerMap<FloorClientMsg>]>[0], c: Parameters<HandlerMap<FloorClientMsg>[keyof HandlerMap<FloorClientMsg>]>[1]) => {
+  const error = ctx.buildingAccess.mutate(c.buildingId, c.accountId);
+  if (error) ctx.warn(c, error);
+  return !error;
+};
+
 export const projectView: ViewPieces['project'] = (_ctx, floor) => floor?.project ?? null;
 
 export const floorHandlers = {
   'floor.go'(ctx, c, msg) {
     if (msg.floor === ROOF) {
-      if (ctx.floors.size) ctx.goToRoof(c);
+      if (ctx.floorInfos(c.buildingId).some((floor) => !floor.cloning)) ctx.goToRoof(c);
       else ctx.warn(c, 'There is no building to go up on yet');
       return;
     }
     const floor = ctx.floors.get(str(msg.floor, 64));
+    if (floor && !ctx.buildingAccess.ownsFloor(c.buildingId, floor.def)) return ctx.warn(c, 'That project belongs to another building');
     if (!floor) ctx.warn(c, ctx.building.pending().some((d) => d.id === msg.floor) ? "That floor is still being cloned — it'll be ready in a moment" : 'No such floor');
     else ctx.goToFloor(c, floor, arrivalSpot(msg.at));
   },
   'floor.repos'(ctx, c, msg) {
-    void ctx.building.repos(msg.refresh === true).then(
+    if (!mayWork(ctx, c)) return;
+    ctx.withGitHub(c, (as) => void ctx.building.repos(msg.refresh === true, as?.env).then(
       (repos) => ctx.sendTo(c, { t: 'floor.repos', repos }),
       (err: Error) => ctx.sendTo(c, { t: 'floor.repos', repos: [], error: `Couldn't list your repositories with gh: ${err.message}` }),
-    );
+    ));
   },
   'floor.add'(ctx, c, msg) {
+    if (!mayWork(ctx, c)) return;
     const who = c.peer.name;
     const repo = str(msg.repo, 200);
-    void ctx.building
+    ctx.withGitHub(c, (as) => void ctx.building
       .add(
         repo,
         who,
@@ -36,6 +45,9 @@ export const floorHandlers = {
           ctx.toastAll(`🛗 ${who} is adding a floor for ${def.repo ?? def.name}…`);
         },
         c.accountId,
+        c.buildingId ?? 'default',
+        c.buildingId === 'default' ? ctx.building.projectsDir : ctx.buildingDirectory.get(c.buildingId ?? 'default')?.workspaceDir ?? ctx.building.projectsDir,
+        as?.env,
       )
       .then((r) => {
         ctx.floorsChanged();
@@ -45,30 +57,35 @@ export const floorHandlers = {
         console.log(`  ${who} added a floor for ${r.repo} (${r.dir})`);
         ctx.toastAll(`🛗 New floor: ${r.name}, added by ${who}`);
         ctx.sendTo(c, { t: 'floor.added', repo, floor: floor.id });
-      });
+      }));
   },
   'floor.cancel'(ctx, c, msg) {
+    if (!mayWork(ctx, c)) return;
     const who = c.peer.name;
     const admin = ctx.meOf(c.accountId).admin;
     const id = str(msg.floor, 64);
     const def = ctx.building.pending().find((d) => d.id === id);
+    if (def && !ctx.buildingAccess.ownsFloor(c.buildingId, def)) return ctx.warn(c, 'That project belongs to another building');
     const err = ctx.building.cancel(id, `${who} stopped the clone`, (owner) => admin || (!!owner && owner === c.accountId));
     if (err) ctx.warn(c, err);
     else ctx.toastAll(`🛗 ${who} stopped cloning ${def?.repo ?? def?.name ?? 'a floor'}`);
   },
   'floor.remove'(ctx, c, msg) {
+    if (!mayWork(ctx, c)) return;
     const who = c.peer.name;
     // Everyone's workers on it stop: admins do it.
     if (!ctx.meOf(c.accountId).admin) return ctx.warn(c, 'Only admins can take a floor off the building');
     const id = str(msg.floor, 64);
+    const floor = ctx.floors.get(id);
+    if (floor && !ctx.buildingAccess.ownsFloor(c.buildingId, floor.def)) return ctx.warn(c, 'That project belongs to another building');
     const r = ctx.building.remove(id, who);
     if (typeof r === 'string') return ctx.warn(c, r);
     console.log(`  ${who} took the ${r.name} floor off the building (${r.dir} stays where it is)`);
-    const floor = ctx.floors.get(id);
     if (floor) ctx.closeFloor(floor, who);
     else ctx.floorsChanged();
   },
   'floor.projectsDir'(ctx, c, msg) {
+    if (!mayWork(ctx, c)) return;
     const who = c.peer.name;
     // It's a folder on the office's machine that `gh` writes into: admins pick it.
     const err = ctx.meOf(c.accountId).admin ? ctx.building.setProjectsDir(str(msg.dir, 1024), who) : 'Only admins can move the workspace folder';

@@ -3,7 +3,7 @@
 import type { GitHubClientMsg } from '../../../shared/protocol.js';
 import { GH_COMMENT_MAX, GH_LABEL_MAX } from '../../../shared/protocol.js';
 import { num, str } from '../../office/input.js';
-import { here } from './common.js';
+import { here, mayMutateBuilding } from './common.js';
 import type { HandlerMap, ViewPieces } from './types.js';
 
 export const issuesView: ViewPieces['issues'] = (_ctx, floor) => floor?.github.issues ?? { items: [], fetchedAt: 0, loading: false };
@@ -14,6 +14,7 @@ export const githubHandlers = {
     void ctx.floorOf(c)?.github.refresh();
   },
   'gh.merge'(ctx, c, msg) {
+    if (!mayMutateBuilding(ctx, c)) return;
     const who = c.peer.name;
     const floor = here(ctx, c);
     const n = num(msg.number);
@@ -33,6 +34,7 @@ export const githubHandlers = {
     );
   },
   'gh.comment'(ctx, c, msg) {
+    if (!mayMutateBuilding(ctx, c)) return;
     const who = c.peer.name;
     const floor = here(ctx, c);
     const n = num(msg.number);
@@ -56,6 +58,7 @@ export const githubHandlers = {
     );
   },
   'gh.close'(ctx, c, msg) {
+    if (!mayMutateBuilding(ctx, c)) return;
     const who = c.peer.name;
     const floor = here(ctx, c);
     const n = num(msg.number);
@@ -77,6 +80,7 @@ export const githubHandlers = {
     );
   },
   'gh.labels'(ctx, c, msg) {
+    if (!mayMutateBuilding(ctx, c)) return;
     const who = c.peer.name;
     const floor = here(ctx, c);
     const n = num(msg.number);

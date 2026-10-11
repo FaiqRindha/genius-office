@@ -2,13 +2,14 @@
 import { isAgentEffort, isAgentProvider, type QueueClientMsg } from '../../../shared/protocol.js';
 import { OPEN_CODE_MODEL_MAX } from '../../../shared/providers.js';
 import { num, str } from '../../office/input.js';
-import { here } from './common.js';
+import { here, mayMutateBuilding } from './common.js';
 import type { HandlerMap, ViewPieces } from './types.js';
 
 export const queueView: ViewPieces['queue'] = (_ctx, floor) => floor?.queue.state() ?? { tasks: [], maxWorkers: 0 };
 
 export const queueHandlers = {
   'queue.add'(ctx, c, msg) {
+    if (!mayMutateBuilding(ctx, c)) return;
     const who = c.peer.name;
     const floor = here(ctx, c);
     if (!floor) return;
@@ -27,20 +28,25 @@ export const queueHandlers = {
     });
   },
   'queue.remove'(ctx, c, msg) {
+    if (!mayMutateBuilding(ctx, c)) return;
     const floor = here(ctx, c);
     if (floor) ctx.warn(c, floor.queue.remove(str(msg.taskId, 32)));
   },
   'queue.move'(ctx, c, msg) {
+    if (!mayMutateBuilding(ctx, c)) return;
     ctx.floorOf(c)?.queue.move(str(msg.taskId, 32), num(msg.delta) < 0 ? -1 : 1);
   },
   'queue.retry'(ctx, c, msg) {
+    if (!mayMutateBuilding(ctx, c)) return;
     const floor = here(ctx, c);
     if (floor) ctx.warn(c, floor.queue.retry(str(msg.taskId, 32)));
   },
   'queue.clear'(ctx, c) {
+    if (!mayMutateBuilding(ctx, c)) return;
     ctx.floorOf(c)?.queue.clear();
   },
   'queue.limit'(ctx, c, msg) {
+    if (!mayMutateBuilding(ctx, c)) return;
     ctx.floorOf(c)?.queue.setLimit(num(msg.maxWorkers));
   },
 } satisfies HandlerMap<QueueClientMsg>;

@@ -71,6 +71,8 @@ export interface CloneRunOptions {
   changed?: () => void;
   stallMs?: number;
   tickMs?: number;
+  /** Account-specific GitHub credentials for this clone. */
+  env?: Record<string, string>;
 }
 
 /** A clone the office is watching, whether it started it or an office before it did. */
@@ -113,7 +115,7 @@ export class CloneRun {
           stdio: ['ignore', fd, fd],
           windowsHide: true,
           // No prompts: nobody would see them. What would have asked says so and fails instead.
-          env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GH_PROMPT_DISABLED: '1' },
+          env: { ...process.env, ...opts.env, GIT_TERMINAL_PROMPT: '0', GH_PROMPT_DISABLED: '1' },
         });
       } finally {
         closeSync(fd);

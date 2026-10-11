@@ -11,6 +11,7 @@ import type { Slice } from '../store';
 import { building, floor, me, presence } from '../core';
 import { accounts } from './accounts';
 import { ball } from './ball';
+import { campus } from './building';
 import { cabinet } from './cabinet';
 import { cars } from './cars';
 import { decor } from './decor';
@@ -56,6 +57,7 @@ export const SLICES: readonly Slice[] = [
   whiteboard,
   cabinet,
   ball,
+  campus,
   cars,
   jail,
   team,

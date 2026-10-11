@@ -18,6 +18,7 @@ import type { Webhook } from '../webhook.js';
 import type { Machine } from '../machine.js';
 import type { Building, FloorDef } from '../building.js';
 import type { BuildingDirectory } from '../building-directory.js';
+import type { BuildingAccess } from '../building-access.js';
 import type { Floor } from '../floor.js';
 import type { Sky } from '../sky.js';
 import type { Themes } from '../theme.js';
@@ -54,6 +55,7 @@ export interface Core {
   building: Building;
   /** Persisted campus membership and per-building roots. */
   buildingDirectory: BuildingDirectory;
+  buildingAccess: BuildingAccess;
   floors: Map<string, Floor>;
 }
 
@@ -114,13 +116,13 @@ export interface FloorHelpers {
   floorOf(c: Client): Floor | undefined;
   /** The floor a worker sits on. Worker ids are unique across the building. */
   workerFloor(workerId: string): Floor | undefined;
-  floorInfos(): FloorInfo[];
+  floorInfos(buildingId?: string): FloorInfo[];
   /** The elevator's counts change with every worker update; tell everyone at most a few times a second. */
   floorsChanged(): void;
   /** Drops a `floorsChanged` still waiting to go out (the office is closing). */
   cancelFloorsChanged(): void;
   /** Where someone arriving goes: the floor they asked for, else the first one there is. */
-  arrivalFloor(wanted: string | null): Floor | undefined;
+  arrivalFloor(wanted: string | null, buildingId?: string): Floor | undefined;
   /**
    * Takes `floor` off the building (already out of floors.json): everyone on it rides the elevator to
    * the next floor, or out to the lobby if it was the last (the roof goes with it), and its workers stop.

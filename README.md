@@ -306,7 +306,7 @@ For HTTPS on your own domain, point a DNS record at the server and add `bash -s 
 
 ## Add users
 
-Named accounts are provisioned with a private campus building on their first sign-in. See [self-hosting](docs/self-hosting.md#campus-buildings) for the persisted directory and migration behavior.
+Named accounts are provisioned with a private campus building on their first sign-in. Open **☰ → 🏢 Buildings**, or tap the ID-card reader beside the elevator, to select a building you belong to. Owners and admins can add an existing account ID, change its role, or remove it there; removal takes effect in open tabs immediately. Visitors may enter but cannot add projects, open terminals, run workers, or change data. See [self-hosting](docs/self-hosting.md#campus-buildings) for the persisted directory and migration behavior.
 
 Everyone gets their own account, so their name is on their character, in chat and on every terminal they type into.
 
