@@ -1,0 +1,82 @@
+.campus-map-modal {
+  width: min(880px, 100%);
+}
+.campus-map-body {
+  padding: 8px;
+}
+.campus-map {
+  display: block;
+  width: 100%;
+  max-height: 70vh;
+  border-radius: 12px;
+  background: #b9d7a0;
+}
+.campus-map .cm-lawn { fill: #b9d7a0; }
+.campus-map .cm-road { fill: #6b6f7a; }
+.campus-map .cm-brick { fill: #c2694f; }
+.campus-map .cm-here { fill: #e07a5f; stroke: #2b2d42; stroke-width: 1.2; }
+.campus-map .cm-mine { fill: #f2cc8f; stroke: #2a9d8f; stroke-width: 1.6; }
+.campus-map .cm-open { fill: #e07a5f; stroke: #2b2d42; stroke-width: 0.8; }
+.campus-map .cm-locked { fill: #9aa0a6; stroke: #2b2d42; stroke-width: 0.8; }
+.campus-map .cm-plaza { fill: #d8d2c4; stroke: #2b2d42; stroke-width: 0.8; stroke-dasharray: 3 2; }
+.campus-map .cm-reader { fill: #5aa9e6; stroke: #2b2d42; stroke-width: 0.5; }
+.campus-map .cm-label { font: 800 5px Nunito, ui-rounded, system-ui, sans-serif; fill: #2b2d42; }
+.campus-map .cm-big { font-size: 6px; }
+.campus-map .cm-sub { font: 700 3.6px Nunito, ui-rounded, system-ui, sans-serif; fill: #2b2d42; opacity: 0.8; }
+.campus-map .cm-road-label { font: 800 4px Nunito, ui-rounded, system-ui, sans-serif; fill: #fffaf3; }
+.campus-map .cm-you path { fill: #ef233c; stroke: #fffaf3; stroke-width: 0.8; }
+.campus-map .cm-you-ring { fill: rgba(239, 35, 60, 0.18); }
+.campus-map .cm-peer { fill: #4361ee; stroke: #fffaf3; stroke-width: 0.8; }
+
+/* The minimap: the map round where you are, in the bottom-right corner, north up. Click it for the whole map. */
+.minimap {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  width: 190px;
+  height: 190px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 3px solid #2b2d42;
+  box-shadow: 0 4px 0 rgba(43, 45, 66, 0.35);
+  background: #b9d7a0;
+  cursor: pointer;
+  pointer-events: auto;
+  z-index: 5;
+}
+.minimap .campus-map {
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  border-radius: 0;
+}
+.minimap .minimap-key {
+  position: absolute;
+  left: 50%;
+  bottom: 8px;
+  transform: translateX(-50%);
+  font: 800 11px Nunito, ui-rounded, system-ui, sans-serif;
+  color: #fffaf3;
+  background: rgba(43, 45, 66, 0.75);
+  border-radius: 999px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+.minimap .minimap-n {
+  position: absolute;
+  left: 50%;
+  top: 4px;
+  transform: translateX(-50%);
+  font: 900 12px Nunito, ui-rounded, system-ui, sans-serif;
+  color: #ef233c;
+  text-shadow: 0 0 3px #fffaf3;
+}
+.minimap.hidden {
+  display: none;
+}
+@media (max-width: 640px) {
+  .minimap {
+    width: 120px;
+    height: 120px;
+  }
+}

@@ -1,7 +1,8 @@
 /**
  * The campus: a building per account round the city, and the ID card reader by each one's door. E at
  * a reader taps your card: green and you're through the door onto its bottom floor, red if your card
- * doesn't open it. At your own building's, L opens its guest list.
+ * doesn't open it. At your own building's, L opens its guest list. The minimap in the corner follows
+ * you about; J (or a click on it) opens the whole map.
  */
 import { ENTRY } from '../../../shared/campus';
 import type { Ctx } from '../../core/context';
@@ -9,6 +10,8 @@ import { aside, hintTitle, key } from '../../core/hint';
 import type { Parts } from '../../core/parts';
 import { store } from '../../state';
 import { clip, toast } from '../../ui/dom';
+import { openCampusMap } from './map';
+import { dotsOf, mountMinimap } from './minimap';
 import { openGuestList } from './ui';
 
 // The kinds of thing you can use that this defines (see InteractKinds in world/types.ts).
@@ -56,6 +59,14 @@ export function installCampus(ctx: Ctx, parts: Pick<Parts, 'travel'>) {
     },
   });
 
+  // The map: the whole of it with J (or a click on the minimap in the corner).
+  const showMap = () => {
+    if (!ctx.inOffice()) toast('🗺️ The map is of the office’s city: this building’s on a map of its own', 'warn');
+    else openCampusMap(() => store.campus, () => dotsOf(ctx));
+  };
+  mountMinimap(ctx, showMap);
+  ctx.keys.bind({ code: 'KeyJ', run: () => showMap() });
+
   // What the reader said: a beep and a green light and in through the door, or a buzz and a red one.
   ctx.messages.on('campus.tapped', (m) => {
     world.flash(m.building, m.ok);
@@ -63,4 +74,6 @@ export function installCampus(ctx: Ctx, parts: Pick<Parts, 'travel'>) {
     toast(`🪪 ${m.text}`, m.ok ? 'info' : 'warn');
     if (m.ok && m.floor) setTimeout(() => parts.travel.enterAt(m.floor!, { ...ENTRY }), 450);
   });
+
+  return { showMap };
 }

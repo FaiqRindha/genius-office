@@ -66,13 +66,20 @@ function signpost(title: string, sub: string, x: number, z: number, rotY: number
   const wood = toon('#6d4c41');
   for (const side of [-1, 1]) g.add(mesh(new THREE.BoxGeometry(0.1, 2.3, 0.1), wood, side * 1.1, 1.15, -0.06));
   g.add(mesh(new THREE.BoxGeometry(2.6, 1.0, 0.06), toon('#2b2d42'), 0, 2.0, -0.04));
-  const top = textPlane(title, { size: 64, color: '#fffaf3' });
-  top.scale.setScalar(Math.min(1.4, 2.4 / (top.geometry.parameters.width || 1)));
-  top.position.set(0, 2.2, 0);
-  const under = textPlane(sub, { size: 40, color: '#ffd6a5' });
-  under.scale.setScalar(Math.min(1.2, 2.4 / (under.geometry.parameters.width || 1)));
-  under.position.set(0, 1.78, 0);
-  g.add(top, under);
+  // Written on both faces, so it reads from either way.
+  for (const back of [false, true]) {
+    const face = new THREE.Group();
+    if (back) face.rotation.y = Math.PI;
+    face.position.z = back ? -0.08 : 0;
+    const top = textPlane(title, { size: 64, color: '#fffaf3' });
+    top.scale.setScalar(Math.min(1.4, 2.4 / (top.geometry.parameters.width || 1)));
+    top.position.set(0, 2.2, 0);
+    const under = textPlane(sub, { size: 40, color: '#ffd6a5' });
+    under.scale.setScalar(Math.min(1.2, 2.4 / (under.geometry.parameters.width || 1)));
+    under.position.set(0, 1.78, 0);
+    face.add(top, under);
+    g.add(face);
+  }
   return g;
 }
 
@@ -104,6 +111,28 @@ export function buildCampus(ground: THREE.Group, colliders: Collider[], night: N
   const homeReader: Interactable = { kind: 'reader', x: HOME_READER.x, z: HOME_READER.z, y: G, radius: 2 };
   // What the crosshair finds when it lands on the reader.
   home.group.userData.interact = homeReader;
+
+  // The name of the building you're in, on its garage: facing the street, and by the exit steps.
+  const homeSign = new THREE.Group();
+  ground.add(homeSign);
+  let homeKey = '';
+  const nameHome = (name: string | null) => {
+    if (name === homeKey) return;
+    homeKey = name ?? '';
+    for (const o of [...homeSign.children]) {
+      o.removeFromParent();
+      o.traverse((m) => (m as THREE.Mesh).geometry?.dispose());
+    }
+    if (!name) return;
+    const front = textPlane(`🏢 ${name}`, { size: 64, color: '#2b2d42', bg: '#fffaf3' });
+    front.scale.setScalar(3.4);
+    front.position.set(-4.8, G + 2.55, FOOTPRINT.maxZ + 0.06);
+    const side = textPlane(`🏢 ${name}`, { size: 64, color: '#2b2d42', bg: '#fffaf3' });
+    side.scale.setScalar(2.6);
+    side.rotation.y = -Math.PI / 2;
+    side.position.set(FOOTPRINT.minX - 0.06, G + 2.2, 0);
+    homeSign.add(front, side);
+  };
 
   const concrete = toon('#c9ccd4');
   const glass = toon('#9fd3ff', { opacity: 0.55 });
@@ -204,6 +233,9 @@ export function buildCampus(ground: THREE.Group, colliders: Collider[], night: N
     homeReader.building = state.here;
     const n = state.buildings.length;
     lay(n > 1 ? n : 0);
+    // Only worth saying once there's more than one building.
+    const hereB = state.buildings.find((b) => b.id === state.here);
+    nameHome(hereB && n > 1 ? (hereB.mine ? `${hereB.name}’s building (yours)` : `${hereB.name}’s building`) : null);
     const add = (c: Collider) => {
       mine.push({ c, top: c.top, bottom: c.bottom ?? 0 });
       colliders.push(c);
