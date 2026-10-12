@@ -120,8 +120,9 @@ export interface FloorHelpers {
   /** Drops a `floorsChanged` still waiting to go out (the office is closing). */
   cancelFloorsChanged(): void;
   /**
-   * Where someone arriving goes: the floor they asked for, if their card opens its building, else the
-   * first floor of their own building, the office's, or any they may go into.
+   * Where someone arriving goes. With an account: the floor they asked for if it's in their own
+   * building, else its first floor, else nowhere (its lobby). On the shared password: the floor they
+   * asked for, else the office's own building's first, else any.
    */
   arrivalFloor(wanted: string | null, who: Who, except?: Floor): Floor | undefined;
   /** The building `c` is in (see Campus.here). */

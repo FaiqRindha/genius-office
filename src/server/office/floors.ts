@@ -63,10 +63,12 @@ export function floorHelpers(ctx: Ctx): FloorHelpers {
   };
   const arrivalFloor = (wanted: string | null, who: Who, except?: Floor): Floor | undefined => {
     const open = [...ctx.floors.values()].filter((f) => f !== except && ctx.campus.mayEnter(who, ctx.campus.of(f.def)));
-    const asked = open.find((f) => f.id === wanted);
-    if (asked) return asked;
-    const inside = (b: string | undefined) => open.find((f) => ctx.campus.of(f.def) === b);
-    return inside(who.accountId) ?? inside(MAIN_BUILDING) ?? open[0];
+    const inside = (b: string) => open.filter((f) => ctx.campus.of(f.def) === b);
+    // Someone with an account comes in at home: their own building, or its lobby while it has no
+    // floors yet (the elevator asks for its first). Anyone else's is a walk and a card away.
+    const own = who.accountId && ctx.accounts.get(who.accountId) ? who.accountId : undefined;
+    if (own) return inside(own).find((f) => f.id === wanted) ?? inside(own)[0];
+    return open.find((f) => f.id === wanted) ?? inside(MAIN_BUILDING)[0] ?? open[0];
   };
 
   /**
