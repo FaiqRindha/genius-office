@@ -4,12 +4,15 @@
  * GitLab changes it; what's in the way moves round the building you're in, as the campus does. At a
  * building's door, E opens it: its floors, a project each, by your own GitLab access (see ui.ts).
  */
+import type * as THREE from 'three';
 import type { Ctx } from '../../core/context';
 import { aside, hintTitle, key } from '../../core/hint';
 import type { Parts } from '../../core/parts';
 import { store } from '../../state';
 import { clip } from '../../ui/dom';
 import { addPlace, standsAt } from '../campus/where';
+import { addBuildingHeight } from '../../core/floors';
+import { MAX_FLOORS } from './world';
 import { plotAt } from '../../../shared/gitlab-quarter';
 import { addMapLayer, mapChanged } from '../campus/map';
 import { quarterLayer } from './map';
@@ -46,9 +49,25 @@ export function installGitLabWorld(ctx: Ctx, parts: Pick<Parts, 'travel'>) {
     return undefined;
   };
   addPlace(plotOf);
+  const insideBuilding = (id: string) => (id.startsWith(GITLAB) ? store.gitlabWorld?.districts.flatMap((d) => d.buildings).find((b) => b.key === id.slice(GITLAB.length)) : undefined);
+  // A GitLab building's as tall as it has projects, inside as out (however many are opened yet).
+  addBuildingHeight(() => Math.min(MAX_FLOORS, insideBuilding(store.campus.here)?.floors.length ?? 0));
+  /** The campus's reader at the foot of the steps of the building you're in: in a GitLab one, the Quarter's is there instead. */
+  const homeReader = () => {
+    const it = ctx.office.campus.readers[0];
+    let post: THREE.Object3D | undefined;
+    ctx.scene.traverse((o) => {
+      if (o.userData.interact === it) post = o;
+    });
+    return { it, post };
+  };
   const here = () => {
     const id = store.campus.here;
-    quarter.setHere(standsAt(id), id.startsWith(GITLAB) ? id.slice(GITLAB.length) : undefined);
+    const inGitLab = id.startsWith(GITLAB);
+    quarter.setHere(standsAt(id), inGitLab ? id.slice(GITLAB.length) : undefined);
+    const home = homeReader();
+    if (home.it) home.it.off = inGitLab;
+    if (home.post) home.post.visible = !inGitLab;
   };
   store.on('campus', here);
   ctx.messages.on('floor.enter', here);

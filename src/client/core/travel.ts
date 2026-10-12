@@ -11,7 +11,7 @@ import { $, clip, closeAllModals, modalOpen, toast } from '../ui/dom';
 import { GARAGE, openElevator } from '../ui/elevator';
 import type { Ctx, TripKind } from './context';
 import type { CoreState } from './ctx';
-import { builtFloors, floorWings } from './floors';
+import { builtFloors, floorWings, shownHeight } from './floors';
 import { aside, hintTitle, key, onE } from './hint';
 import type { Parts } from './parts';
 import { FAR } from './scene';
@@ -44,7 +44,7 @@ export function installTravel(ctx: Ctx, core: CoreState, parts: TravelParts) {
     // Up on the roof there's no ladder or pole to take: nothing above, nothing below.
     const up = store.floor === ROOF ? undefined : floors[index + 1]?.name;
     const down = index > 0 ? floors[index - 1]?.name : undefined;
-    const count = index < 0 ? 1 : floors.length;
+    const count = index < 0 ? 1 : shownHeight(floors.length);
     const wings = floorWings(floors);
     // A map of its own is a hall on the ground: nothing under its floor to fall to, but its dungeon's.
     player.street = inOffice() ? streetBelow(index) : streetOf(ctx.world());
@@ -56,6 +56,8 @@ export function installTravel(ctx: Ctx, core: CoreState, parts: TravelParts) {
     office.setLevel(Math.max(0, index), count, wings);
   }
   store.on('floors', syncStack);
+  // Which building you're in (and so how tall it's drawn) can change with it.
+  store.on('campus', syncStack);
 
   /** Not a trip of yours: the office put you on another floor (yours went), in its elevator car. Whatever you were doing stops. */
   function takenAway() {

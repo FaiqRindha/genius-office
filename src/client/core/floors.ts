@@ -33,3 +33,19 @@ export function seatBuilt(id: string): boolean {
 export function pastTheWing(p: { x: number; y: number; z: number }, level: number): boolean {
   return p.y > -1 && p.y < 3 && p.x > WING.minX - 0.3 && p.x < WING.maxX + 0.3 && p.z < FLOOR.minZ && !inWing(p.x, p.z, level);
 }
+
+/** How many floors the building you're in shows besides the ones built (see addBuildingHeight). */
+const heights: (() => number)[] = [];
+
+/**
+ * Has the building you're in drawn at least as tall as `floors()` says (a GitLab building is as tall
+ * as it has projects, opened or not: see features/gitlab-world), however many of its floors are built.
+ */
+export function addBuildingHeight(floors: () => number) {
+  heights.push(floors);
+}
+
+/** How tall the building you're in is drawn: its `built` floors, or more if something says so. */
+export function shownHeight(built: number): number {
+  return Math.max(built, ...heights.map((f) => f()));
+}

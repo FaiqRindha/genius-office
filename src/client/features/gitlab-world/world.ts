@@ -215,13 +215,15 @@ export function buildQuarter(ground: THREE.Group, colliders: Collider[], night: 
     const out: THREE.Object3D[] = [];
     for (const b of d.buildings) {
       const at = plotAt(d.cells, b.slot);
-      // You're in it: its floors stand on its plot, over its garage (see Grounds).
-      if (!at || b.key === inside) continue;
-      const { group, solid } = officeBuilding(b, night);
-      group.position.set(at.x, 0, at.z);
-      out.push(group);
-      standing.push({ group, x: at.x, z: at.z });
-      for (const c of solid) add({ ...c, minX: c.minX + at.x, maxX: c.maxX + at.x, minZ: c.minZ + at.z, maxZ: c.maxZ + at.z });
+      if (!at) continue;
+      // You're in it: its floors stand on its plot, over its garage (see Grounds); only its reader's ours.
+      if (b.key !== inside) {
+        const { group, solid } = officeBuilding(b, night);
+        group.position.set(at.x, 0, at.z);
+        out.push(group);
+        standing.push({ group, x: at.x, z: at.z });
+        for (const c of solid) add({ ...c, minX: c.minX + at.x, maxX: c.maxX + at.x, minZ: c.minZ + at.z, maxZ: c.maxZ + at.z });
+      }
       // Its card reader, at the foot of its steps, as the campus's: E there opens it.
       const post = reader();
       post.position.set(at.x + READER.x, G, at.z + READER.z);
