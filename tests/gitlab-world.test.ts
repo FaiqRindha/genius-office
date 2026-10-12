@@ -204,3 +204,54 @@ test('a building looks the same every time, and fits on its plot', async () => {
   // Varied: most of two hundred namespaces look unlike each other.
   assert.ok(looks.size > 150, `${looks.size} looks`);
 });
+
+test("the Quarter's roads are one network, joined to the main street, and a car drives every one of them", async () => {
+  const { QUARTER_ROADS, QUARTER_PATH, QUARTER, onQuarterRoad } = await import('../src/shared/gitlab-quarter.ts');
+  const { onPavement, paved } = await import('../src/shared/garage.ts');
+  const { ROAD } = await import('../src/shared/layout.ts');
+  // Every stretch meets another, all the way back to the road up from the main street.
+  const touch = (a: (typeof QUARTER_ROADS)[number], b: (typeof QUARTER_ROADS)[number]) => a.minX <= b.maxX && b.minX <= a.maxX && a.minZ <= b.maxZ && b.minZ <= a.maxZ;
+  const reached = new Set([0]);
+  for (let grew = true; grew; ) {
+    grew = false;
+    QUARTER_ROADS.forEach((r, i) => {
+      if (!reached.has(i) && [...reached].some((j) => touch(QUARTER_ROADS[j], r))) (reached.add(i), (grew = true));
+    });
+  }
+  assert.equal(reached.size, QUARTER_ROADS.length);
+  // The way up starts on the main street.
+  assert.ok(QUARTER_ROADS[0].maxZ >= ROAD.minZ && paved(QUARTER_PATH.x, (ROAD.minZ + ROAD.maxZ) / 2));
+  // A car fits down the middle of every stretch, either way it's pointing.
+  for (const r of QUARTER_ROADS) {
+    const along = r.maxX - r.minX > r.maxZ - r.minZ;
+    const cx = (r.minX + r.maxX) / 2;
+    const cz = (r.minZ + r.maxZ) / 2;
+    for (let t = 0.04; t < 1; t += 0.04) {
+      const x = along ? r.minX + (r.maxX - r.minX) * t : cx;
+      const z = along ? cz : r.minZ + (r.maxZ - r.minZ) * t;
+      for (const rotY of along ? [Math.PI / 2, -Math.PI / 2] : [0, Math.PI]) assert.ok(onPavement({ x, z, rotY }), `car at ${x.toFixed(0)},${z.toFixed(0)}`);
+    }
+  }
+  // Off the roads is still the meadow (and the lawn the garage test keeps unpaved stays so).
+  assert.equal(onQuarterRoad(QUARTER_PATH.x + 20, -150), false);
+  assert.equal(onPavement({ x: -40, z: 18, rotY: 0 }), false);
+  assert.ok(onQuarterRoad(QUARTER.x, QUARTER.z - 500));
+});
+
+test("nothing of the Quarter's stands on its roads", async () => {
+  const { QUARTER_ROADS, plotAt, cellAt, CELLS, QUARTER } = await import('../src/shared/gitlab-quarter.ts');
+  const { styleOf } = await import('../src/client/features/gitlab-world/style.ts');
+  const overlaps = (a: { minX: number; maxX: number; minZ: number; maxZ: number }) => QUARTER_ROADS.some((r) => a.minX < r.maxX && r.minX < a.maxX && a.minZ < r.maxZ && r.minZ < a.maxZ);
+  for (let c = 0; c < CELLS; c++) {
+    for (let i = 0; i < 16; i++) {
+      const at = plotAt([c], i)!;
+      // The widest a building gets (a podium's base, 32 across and deep): its door may face a road, it may not stand on one.
+      assert.equal(overlaps({ minX: at.x - 16, maxX: at.x + 16, minZ: at.z - 16, maxZ: at.z + 16 }), false, `plot ${i} of cell ${c}`);
+    }
+    // The gate's pillars, just inside its cell's front edge.
+    const at = cellAt(c);
+    const gz = at.z + QUARTER.cellD / 2 - 8;
+    for (const side of [-1, 1]) assert.equal(overlaps({ minX: at.x + side * 9 - 0.7, maxX: at.x + side * 9 + 0.7, minZ: gz - 0.7, maxZ: gz + 0.7 }), false);
+  }
+  void styleOf;
+});

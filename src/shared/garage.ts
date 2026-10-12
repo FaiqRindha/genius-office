@@ -1,5 +1,6 @@
 import { FLOOR, ROAD, WALL_T } from './layout.js';
 import { STREET_END, onLoop } from './scenic.js';
+import { onQuarterRoad } from './gitlab-quarter.js';
 
 // The Lambos and Ferraris in the garage, which anyone can drive: where they're parked, where you can
 // take them (the garage, the lots round it, the street and the scenic loop off either end of it), and
@@ -162,7 +163,7 @@ export function carPoint(p: { x: number; z: number; rotY: number }, lx: number, 
 
 /** Whether (x, z) is somewhere a car can be: the garage, the lots, the street or the loop. */
 export function paved(x: number, z: number): boolean {
-  return PAVEMENT.some((b) => x >= b.minX && x <= b.maxX && z >= b.minZ && z <= b.maxZ) || onLoop(x, z);
+  return PAVEMENT.some((b) => x >= b.minX && x <= b.maxX && z >= b.minZ && z <= b.maxZ) || onLoop(x, z) || onQuarterRoad(x, z);
 }
 
 /** Whether the whole car is on the pavement: its corners, and halfway along each side. */

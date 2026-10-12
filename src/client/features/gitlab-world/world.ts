@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { CELLS, QUARTER, QUARTER_PATH, cellAt, plotAt } from '../../../shared/gitlab-quarter';
+import { CELLS, QUARTER, QUARTER_ROADS, cellAt, plotAt } from '../../../shared/gitlab-quarter';
 import type { WorldBuilding, WorldDistrict, WorldState } from '../../../shared/gitlab-world';
 import { STOREY, STREET_Y } from '../../../shared/layout';
 import { mergeByColor, mesh, textPlane, toon } from '../../world/toon';
@@ -35,8 +35,7 @@ export interface GitLabQuarter {
 
 const G = STREET_Y;
 const PAVE = '#c9c2b8';
-const ASPHALT = '#4a4e69';
-const KERB = '#adb5bd';
+const ASPHALT = '#5b606c';
 const LAWN = '#8cb369';
 const SIGN = { color: '#2b2d42', bg: '#fffaf3' } as const;
 
@@ -266,7 +265,7 @@ export function buildQuarter(ground: THREE.Group, colliders: Collider[]) {
     colliders.push(live);
   };
 
-  /** The ground of a district's cells, the avenue along the Quarter's front, and the path up to it. */
+  /** The ground of each district's cells, and every road of the Quarter (see QUARTER_ROADS), the way up from town too. */
   const lay = (state: WorldState) => {
     const g = new THREE.Group();
     const used = state.districts.flatMap((d) => d.cells).filter((c) => c < CELLS);
@@ -274,19 +273,23 @@ export function buildQuarter(ground: THREE.Group, colliders: Collider[]) {
       const at = cellAt(c);
       box(g, PAVE, QUARTER.cellW - 14, 0.06, QUARTER.cellD - 14, at.x, G, at.z);
     }
-    const cols = Math.min(QUARTER.cols, Math.max(1, ...used.map((c) => (c % QUARTER.cols) + 1)));
-    // From the path up from town (on its west side) to the last column there's a district in.
-    const left = Math.min(QUARTER.x, QUARTER_PATH.x - QUARTER_PATH.width);
-    const right = QUARTER.x + cols * QUARTER.cellW;
-    // The avenue along the front, and its kerb.
-    box(g, ASPHALT, right - left + 10, 0.05, 10, (left + right) / 2, G, QUARTER.z + 2);
-    box(g, KERB, right - left + 10, 0.2, 0.4, (left + right) / 2, G, QUARTER.z + 7.2);
-    // The avenues between the rows of cells.
-    const rows = Math.max(1, ...used.map((c) => Math.floor(c / QUARTER.cols) + 1));
-    for (let r = 1; r < rows; r++) box(g, ASPHALT, right - QUARTER.x, 0.05, 8, (QUARTER.x + right) / 2, G, QUARTER.z - r * QUARTER.cellD);
-    // The path up through the meadow from the campus's boulevard.
-    box(g, '#b56576', QUARTER_PATH.width, 0.05, QUARTER_PATH.fromZ - QUARTER.z, QUARTER_PATH.x, G, (QUARTER_PATH.fromZ + QUARTER.z) / 2);
+    for (const r of QUARTER_ROADS) road(g, r);
     return mergeByColor(g);
+  };
+
+  /** A stretch of road: asphalt, a white line along each edge, and a dashed yellow one down the middle (as the main street). */
+  const road = (g: THREE.Group, r: { minX: number; maxX: number; minZ: number; maxZ: number }) => {
+    const w = r.maxX - r.minX;
+    const d = r.maxZ - r.minZ;
+    const cx = (r.minX + r.maxX) / 2;
+    const cz = (r.minZ + r.maxZ) / 2;
+    box(g, ASPHALT, w, 0.05, d, cx, G, cz);
+    const along = w > d;
+    const len = along ? w : d;
+    const half = (along ? d : w) / 2 - 0.35;
+    for (const side of [-1, 1]) box(g, '#f1f1f1', along ? len : 0.18, 0.06, along ? 0.18 : len, along ? cx : cx + side * half, G, along ? cz + side * half : cz);
+    // Dashes 4 m long every 8 m, from the start of the stretch.
+    for (let s = 2; s < len - 2; s += 8) box(g, '#ffd166', along ? 4 : 0.2, 0.065, along ? 0.2 : 4, along ? r.minX + s + 2 : cx, G, along ? cz : r.minZ + s + 2);
   };
 
   const district = (d: WorldDistrict): THREE.Object3D[] => {
@@ -314,7 +317,7 @@ export function buildQuarter(ground: THREE.Group, colliders: Collider[]) {
     }
     // The gate, on the avenue along the front of its first cell.
     const c = cellAt(d.cells[0]);
-    const gz = c.z + QUARTER.cellD / 2 - 6;
+    const gz = c.z + QUARTER.cellD / 2 - 8;
     const g = gate(d.name, d.buildings.length);
     g.position.set(c.x, G, gz);
     signs.add(g);

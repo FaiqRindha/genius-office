@@ -158,7 +158,7 @@ export function openCampusMap(state: () => CampusState, dots: () => { you: MapDo
     h(
       'footer',
       {},
-      h('span.grow', {}, here ? `You’re in ${here.mine ? 'your building' : `${here.name}’s building`}. The office’s own is on the main street, and everyone’s stands in the district north of it: up the brick path from the foot of its exit steps. ● is a card reader, at the foot of each building’s steps: tap your card there and its door opens.` : 'The campus, from above.'),
+      h('span.grow', {}, here ? `You’re in ${here.mine ? 'your building' : `${here.name}’s building`}, on the main street. Every project on your GitLab stands in the GitLab Quarter north of it, a building a group: drive up the road off the main street west of the office, and go in at a building’s door. ● is a card reader, at the foot of a building’s steps.` : 'The campus, from above.'),
     ),
   );
   body.append(map.svg);

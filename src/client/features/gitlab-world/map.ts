@@ -1,10 +1,10 @@
-import { QUARTER, QUARTER_PATH, cellAt, plotAt, CELLS } from '../../../shared/gitlab-quarter';
+import { QUARTER, QUARTER_PATH, QUARTER_ROADS, cellAt, plotAt, CELLS } from '../../../shared/gitlab-quarter';
 import type { WorldState } from '../../../shared/gitlab-world';
 import type { MapLayer } from '../campus/map';
 import { styleOf } from './style';
 
-// The GitLab Quarter on the 🗺️ map and the minimap (see campus/map.ts): the brick path up from the
-// boulevard, its avenues, each district's block with its name where its gate is, and each building
+// The GitLab Quarter on the 🗺️ map and the minimap (see campus/map.ts): the road up from the main
+// street and its grid of avenues and streets (the ones cars drive on, see QUARTER_ROADS), each district's block with its name where its gate is, and each building
 // in its colours, with its name.
 
 /** The Quarter as `world()` has it, as a layer of the map. */
@@ -33,16 +33,9 @@ export function quarterLayer(world: () => WorldState | null): MapLayer {
       const g = el('g', { class: 'cm-gitlab' });
       const rect = (x: number, z: number, w: number, d: number, cls: string, fill?: string) => g.append(el('rect', { x, y: z, width: w, height: d, class: cls, ...(fill ? { fill } : {}) }));
       const label = (x: number, z: number, text: string, cls: string) => g.append(el('text', { x, y: z, class: cls, 'text-anchor': 'middle' }, text));
-      const cols = Math.max(...cells.map((c) => (c % QUARTER.cols) + 1));
-      const rows = Math.max(...cells.map((c) => Math.floor(c / QUARTER.cols) + 1));
-      const left = Math.min(QUARTER.x, QUARTER_PATH.x - QUARTER_PATH.width);
-      const right = QUARTER.x + cols * QUARTER.cellW;
-      // The path up through the meadow, then the avenues.
-      rect(QUARTER_PATH.x - QUARTER_PATH.width / 2, QUARTER.z, QUARTER_PATH.width, QUARTER_PATH.fromZ - QUARTER.z, 'cm-brick');
-      rect(left, QUARTER.z - 3, right - left, 10, 'cm-road');
-      // Its name by the path, where it comes into the Quarter.
-      g.append(el('text', { x: QUARTER_PATH.x + QUARTER_PATH.width, y: QUARTER.z + 16, class: 'cm-gl-district' }, '🦊 GitLab Quarter ↑'));
-      for (let r = 1; r < rows; r++) rect(QUARTER.x, QUARTER.z - r * QUARTER.cellD - 4, right - QUARTER.x, 8, 'cm-road');
+      // Every road (the map's edges cut off the ones out past the districts), then its name by the way up.
+      for (const r of QUARTER_ROADS) rect(r.minX, r.minZ, r.maxX - r.minX, r.maxZ - r.minZ, 'cm-road');
+      g.append(el('text', { x: QUARTER_PATH.x + QUARTER_PATH.width, y: QUARTER.z + 18, class: 'cm-gl-district' }, '🦊 GitLab Quarter ↑'));
       for (const d of state.districts) {
         const own = d.cells.filter((c) => c < CELLS);
         if (!own.length) continue;

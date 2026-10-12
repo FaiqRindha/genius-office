@@ -341,7 +341,8 @@ export function buildStreet(group: THREE.Group, colliders: Collider[], night: Ni
 
   // Trees along the sidewalks and around the building.
   const trees: [number, number, number][] = [
-    [-34, 22, 1.1],
+    // West of the road up to the GitLab Quarter, which leaves the street at x -34 (see QUARTER_PATH).
+    [-46, 22, 1.1],
     [-22, 22, 1],
     [22, 22, 1.05],
     [34, 22, 0.95],
