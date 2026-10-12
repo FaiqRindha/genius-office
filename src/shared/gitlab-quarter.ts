@@ -34,8 +34,6 @@ export const CELLS = QUARTER.cols * ROWS;
 export const STREET_W = 8;
 /** From a plot's middle to the road along its front: its garage opens onto it. */
 const FRONT = FLOOR.maxZ + WALL_T + 0.5;
-/** Where a Quarter building stands on its plot, seen from outside: back from the road, as the office does. */
-export const BUILDING_Z = -3;
 
 /** The middle of cell `c`. */
 export function cellAt(c: number): { x: number; z: number } {

@@ -56,6 +56,14 @@ export function installGitLabWorld(ctx: Ctx, parts: Pick<Parts, 'travel'>) {
   here();
 
   ctx.usables.add({ usable: () => quarter.doors });
+  // Only the buildings this side of the fog are drawn: where you are in the world, now and then.
+  let culledAt = 0;
+  ctx.ticks.add('world', ({ now }) => {
+    if (now - culledAt < 500) return;
+    culledAt = now;
+    const at = ctx.office.grounds.offset();
+    quarter.cull({ x: ctx.player.pos.x + at.x, z: ctx.player.pos.z + at.z });
+  });
   const buildingOf = (key?: string) => store.gitlabWorld?.districts.flatMap((d) => d.buildings).find((b) => b.key === key);
   let openedAt = 0;
   ctx.interactions.define('gitlabdoor', {

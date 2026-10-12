@@ -195,21 +195,6 @@ test('a district with more buildings than a cell holds takes another, and nobody
   assert.deepEqual(cellsOf(later), { aaa: [0], big: [1, 2, 4, 5], zzz: [3] });
 });
 
-test('a building looks the same every time, and fits on its plot', async () => {
-  const { styleOf, MAX_STOREYS } = await import('../src/client/features/gitlab-world/style.ts');
-  assert.deepEqual(styleOf('genius/genius-lab', 3), styleOf('genius/genius-lab', 3));
-  const looks = new Set<string>();
-  for (let i = 0; i < 200; i++) {
-    const s = styleOf(`group/ns${i}`, i % 40);
-    looks.add(`${s.shape}|${s.roof}|${s.windows}|${s.facade}`);
-    // A podium's base is 6 m wider and 4 m deeper than it: still inside a 34 × 36 plot, with room round it.
-    assert.ok((s.shape === 'podium' ? s.w + 6 : s.w) <= 32 && (s.shape === 'podium' ? s.d + 4 : s.d) <= 32, `${s.shape} ${s.w}×${s.d}`);
-    assert.ok(s.storeys >= 2 && s.storeys <= MAX_STOREYS);
-  }
-  // Varied: most of two hundred namespaces look unlike each other.
-  assert.ok(looks.size > 150, `${looks.size} looks`);
-});
-
 test("the Quarter's roads are one network, joined to the main street, and a car drives every one of them", async () => {
   const { QUARTER_ROADS, QUARTER_PATH, QUARTER, onQuarterRoad } = await import('../src/shared/gitlab-quarter.ts');
   const { onPavement, paved } = await import('../src/shared/garage.ts');
@@ -244,16 +229,14 @@ test("the Quarter's roads are one network, joined to the main street, and a car 
 });
 
 test("nothing of the Quarter's stands on its roads, and every garage opens onto one", async () => {
-  const { QUARTER_ROADS, QUARTER_GARAGES, plotAt, PER_CELL, CELLS, BUILDING_Z } = await import('../src/shared/gitlab-quarter.ts');
+  const { QUARTER_ROADS, QUARTER_GARAGES, plotAt, PER_CELL, CELLS } = await import('../src/shared/gitlab-quarter.ts');
   const { onPavement } = await import('../src/shared/garage.ts');
   const overlaps = (a: { minX: number; maxX: number; minZ: number; maxZ: number }) => QUARTER_ROADS.some((r) => a.minX < r.maxX && r.minX < a.maxX && a.minZ < r.maxZ && r.minZ < a.maxZ);
   for (let c = 0; c < CELLS; c++) {
     for (let i = 0; i < PER_CELL; i++) {
       const at = plotAt([c], i)!;
-      // The office building whose floors stand here when you're in it (reader to east wall, wing to steps)...
+      // The office building that stands on it, inside or out (reader to east wall, wing to steps).
       assert.equal(overlaps({ minX: at.x - 20.5, maxX: at.x + 18.3, minZ: at.z - 22.2, maxZ: at.z + 13.3 }), false, `office on plot ${i} of cell ${c}`);
-      // ...and the Quarter's own, seen from outside (the widest a style gets: 32 across and deep).
-      assert.equal(overlaps({ minX: at.x - 16, maxX: at.x + 16, minZ: at.z + BUILDING_Z - 16, maxZ: at.z + BUILDING_Z + 16 }), false, `building on plot ${i} of cell ${c}`);
     }
   }
   // From each garage a car drives straight out onto its road: from its back, south to the road.

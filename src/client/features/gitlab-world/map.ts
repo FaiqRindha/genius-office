@@ -1,7 +1,7 @@
 import { QUARTER, QUARTER_PATH, QUARTER_ROADS, cellAt, plotAt, CELLS } from '../../../shared/gitlab-quarter';
 import type { WorldState } from '../../../shared/gitlab-world';
 import type { MapLayer } from '../campus/map';
-import { styleOf } from './style';
+import { FOOTPRINT } from '../../../shared/campus';
 
 // The GitLab Quarter on the 🗺️ map and the minimap (see campus/map.ts): the road up from the main
 // street and its grid of avenues and streets (the ones cars drive on, see QUARTER_ROADS), each district's block with its name where its gate is, and each building
@@ -46,10 +46,8 @@ export function quarterLayer(world: () => WorldState | null): MapLayer {
         for (const b of d.buildings) {
           const at = plotAt(d.cells, b.slot);
           if (!at) continue;
-          const s = styleOf(b.key, b.floors.length);
-          const w = s.shape === 'podium' ? s.w + 6 : s.w;
-          const dd = s.shape === 'podium' ? s.d + 4 : s.d;
-          rect(at.x - w / 2, at.z - dd / 2, w, dd, 'cm-gl-building', s.facade);
+          // An office building, as the one on the main street is drawn.
+          rect(at.x + FOOTPRINT.minX, at.z + FOOTPRINT.minZ, FOOTPRINT.maxX - FOOTPRINT.minX, FOOTPRINT.maxZ - FOOTPRINT.minZ, 'cm-gl-building', '#e07a5f');
           // Its full name, path and projects when you point at it (the label's small at this scale).
           const live = b.floors.filter((f) => !f.archived).length;
           g.lastElementChild?.append(el('title', {}, `${b.name} · ${b.key} · ${live} project${live === 1 ? '' : 's'}`));
