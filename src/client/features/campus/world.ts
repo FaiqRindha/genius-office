@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { AVENUE, BOULEVARD, DISTRICT, ENTRANCE, FOOTPRINT, HOME_READER, READER, districtEnd, slotAt } from '../../../shared/campus';
-import { SLAB, STOREY, STREET_Y, WALL_HEIGHT } from '../../../shared/layout';
+import { EXIT_STAIRS, SLAB, STOREY, STREET_Y, WALL_HEIGHT } from '../../../shared/layout';
 import type { CampusState } from '../../../shared/protocol';
 import type { NightParts } from '../../world/outside';
 import { mergeByMaterial, mesh, textPlane, toon, toonUnique } from '../../world/toon';
@@ -55,6 +55,27 @@ function readerPost(x: number, z: number, rotY: number): { group: THREE.Group; l
   return { group, led };
 }
 
+/** The brick path from the foot of the office's exit steps west to the boulevard: its middle, and how wide. */
+const PATH = { z: EXIT_STAIRS.landingZ1 + 4.2, width: 2 } as const;
+
+/** A sign on two posts: a title and a line under it, facing +z turned `rotY`. */
+function signpost(title: string, sub: string, x: number, z: number, rotY: number): THREE.Group {
+  const g = new THREE.Group();
+  g.position.set(x, G, z);
+  g.rotation.y = rotY;
+  const wood = toon('#6d4c41');
+  for (const side of [-1, 1]) g.add(mesh(new THREE.BoxGeometry(0.1, 2.3, 0.1), wood, side * 1.1, 1.15, -0.06));
+  g.add(mesh(new THREE.BoxGeometry(2.6, 1.0, 0.06), toon('#2b2d42'), 0, 2.0, -0.04));
+  const top = textPlane(title, { size: 64, color: '#fffaf3' });
+  top.scale.setScalar(Math.min(1.4, 2.4 / (top.geometry.parameters.width || 1)));
+  top.position.set(0, 2.2, 0);
+  const under = textPlane(sub, { size: 40, color: '#ffd6a5' });
+  under.scale.setScalar(Math.min(1.2, 2.4 / (under.geometry.parameters.width || 1)));
+  under.position.set(0, 1.78, 0);
+  g.add(top, under);
+  return g;
+}
+
 /** One slot's building: its tower (kept, and only raised or lowered after), garage, doors, sign and reader. */
 interface Slot {
   group: THREE.Group;
@@ -88,6 +109,8 @@ export function buildCampus(ground: THREE.Group, colliders: Collider[], night: N
   const glass = toon('#9fd3ff', { opacity: 0.55 });
   const pave = toon('#d8d2c4');
   const asphalt = toon('#6b6f7a');
+  const brick = toon('#c2694f');
+  const curb = toon('#efe6d6');
   const roofMat = toon('#fffaf3');
 
   /** The district's ground: the boulevard up from the street, an avenue in front of each row, and pavement round it all. */
@@ -105,8 +128,20 @@ export function buildCampus(ground: THREE.Group, colliders: Collider[], night: N
     const flat = (w: number, d: number, mat: THREE.Material, x: number, z: number, y: number) => parts.add(mesh(new THREE.PlaneGeometry(w, d).rotateX(-Math.PI / 2), mat, x, G + y, z, false));
     flat(half * 2, south - north, pave, 0, (south + north) / 2, 0.03);
     for (let r = 0; r < rows; r++) flat(half * 2, AVENUE.width, asphalt, 0, slotAt(r * DISTRICT.cols).z + AVENUE.ahead, 0.05);
-    flat(BOULEVARD.width, BOULEVARD.fromZ - south, pave, BOULEVARD.x, (BOULEVARD.fromZ + south) / 2, 0.04);
+    // The boulevard in brick between white curbs, and a brick path to it from the foot of the exit steps.
+    const length = BOULEVARD.fromZ - south;
+    const mid = (BOULEVARD.fromZ + south) / 2;
+    flat(BOULEVARD.width, length, brick, BOULEVARD.x, mid, 0.04);
+    for (const side of [-1, 1]) flat(0.4, length, curb, BOULEVARD.x + side * (BOULEVARD.width / 2 + 0.2), mid, 0.045);
+    const pathX0 = BOULEVARD.x + BOULEVARD.width / 2;
+    const pathX1 = EXIT_STAIRS.minX - 0.2;
+    flat(pathX1 - pathX0, PATH.width, brick, (pathX0 + pathX1) / 2, PATH.z, 0.04);
     paving.add(mergeByMaterial(parts));
+    // Signs the way there: where the boulevard leaves the street, and at the foot of the exit steps.
+    const others = n - 1;
+    const more = `${others} other building${others === 1 ? '' : 's'}`;
+    paving.add(signpost('🏙️ Other buildings ⬆', `${more} up the brick path`, BOULEVARD.x + BOULEVARD.width / 2 + 0.9, BOULEVARD.fromZ - 0.6, 0));
+    paving.add(signpost('🏙️ Other buildings', `${more}: ⬅ west on the brick path, then north`, EXIT_STAIRS.minX - 1.4, PATH.z + PATH.width / 2 + 0.6, Math.PI));
   };
 
   /** The garage under a building, its glass doors, and its name over them. */
