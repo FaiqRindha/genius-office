@@ -8,6 +8,7 @@ import { isBusy } from '../../shared/status.js';
 import { gh } from '../github.js';
 import type { GhAs } from '../signins.js';
 import { Worktrees } from '../worktrees.js';
+import { createMr, editMrBody, gitlabFloorAt, openMr, pushEnv } from '../forge.js';
 import { run } from './process.js';
 import type { OpenedPr, Worker, WorkerContext } from './types.js';
 import { truncate } from './util.js';
@@ -18,11 +19,11 @@ const PR_TASK_MAX = 2500;
 /** Around the list of a change's pull requests in each of their descriptions, so it can be brought up to date. */
 const RELATED_START = '<!-- agent-office:related -->';
 const RELATED_END = '<!-- /agent-office:related -->';
-/** `gh pr create` being run, alone or in a longer line: not one that only names it (a grep for it, a quoted string). */
-const CREATES_PR = /(?:^|[\s;&|(])gh\s+pr\s+create\b/;
+/** `gh pr create` (or a GitLab's `glab mr create`) being run, alone or in a longer line: not one that only names it (a grep for it, a quoted string). */
+const CREATES_PR = /(?:^|[\s;&|(])(?:gh\s+pr|glab\s+mr)\s+create\b/;
 /** How many of the pull requests a worker opened before its latest are remembered. */
 const MAX_PAST_PRS = 20;
-const PR_URL = /https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)/g;
+const PR_URL = /https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)|https?:\/\/[\w.:-]+\/([\w.-]+(?:\/[\w.-]+)+)\/-\/merge_requests\/(\d+)/g;
 
 /**
  * The pull request a worker opened itself, read off a shell command it ran and what that printed:
@@ -32,17 +33,22 @@ const PR_URL = /https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)/g;
 export function ownPr(command: unknown, output: string): { repo: string; number: number; url: string } | undefined {
   if (typeof command !== 'string' || !CREATES_PR.test(command)) return undefined;
   const last = [...output.matchAll(PR_URL)].pop();
-  return last && { repo: last[1], number: Number(last[2]), url: last[0] };
+  // owner/name on GitHub, or group/project on a GitLab.
+  return last && { repo: last[1] ?? last[3], number: Number(last[2] ?? last[4]), url: last[0] };
 }
 
-async function findOpenPr(branch: string, cwd: string): Promise<{ number: number; url: string } | undefined> {
+async function findOpenPr(branch: string, cwd: string, as?: GhAs): Promise<{ number: number; url: string } | undefined> {
+  const gitlab = gitlabFloorAt(cwd);
+  if (gitlab) return openMr(gitlab, branch, as?.env);
   const out = await gh(['pr', 'list', '--head', branch, '--state', 'open', '--limit', '1', '--json', 'number,url'], cwd);
   const found = (JSON.parse(out || '[]') as { number: number; url: string }[])[0];
   return found ? { number: found.number, url: found.url } : undefined;
 }
 
-/** `gh pr create` for a pushed branch; resolves to the new pull request. */
+/** `gh pr create` for a pushed branch (on a GitLab floor, a merge request); resolves to the new pull request. */
 async function createPr(branch: string, base: string | undefined, title: string, body: string, cwd: string, as?: GhAs): Promise<{ number: number; url: string }> {
+  const gitlab = gitlabFloorAt(cwd);
+  if (gitlab) return createMr(gitlab, branch, base, title, body, as?.env);
   const out = await gh(['pr', 'create', '--head', branch, ...(base ? ['--base', base] : []), '--title', title, '--body', body], cwd, 60_000, as?.env);
   const url = out.trim().split('\n').pop() ?? '';
   const number = Number(/\/pull\/(\d+)/.exec(url)?.[1]);
@@ -50,10 +56,24 @@ async function createPr(branch: string, base: string | undefined, title: string,
   return { number, url };
 }
 
-/** owner/name#12 for a pull request on GitHub (which links it with its title), else its URL. */
+/** owner/name#12 for a pull request on GitHub, group/project!12 for a GitLab merge request (which link them with their titles), else its URL. */
 function prRef(url: string): string {
   const m = /github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)/.exec(url);
-  return m ? `${m[1]}#${m[2]}` : url;
+  if (m) return `${m[1]}#${m[2]}`;
+  const gl = /^https?:\/\/[^/]+\/(.+?)\/-\/merge_requests\/(\d+)/.exec(url);
+  return gl ? `${gl[1]}!${gl[2]}` : url;
+}
+
+/** The pushing environment: `as`'s, or on a GitLab floor with nobody's own, the reader's (see forge.ts). */
+function pushAs(cwd: string, as?: GhAs): Record<string, string> | undefined {
+  const gitlab = gitlabFloorAt(cwd);
+  return gitlab ? pushEnv(gitlab, as?.env) : as?.env;
+}
+
+/** The project a checkout is of: owner/name on GitHub, or group/project on a GitLab floor. */
+function homeRepo(dir: string): string | undefined {
+  const gitlab = gitlabFloorAt(dir);
+  return gitlab ? new URL(gitlab.project).pathname.replace(/^\/+/, '') : originRepo(dir);
 }
 
 /** The list of a change's pull requests across repositories, for the description of the one at `self`. */
@@ -111,7 +131,7 @@ export class WorkerPrs {
     if (!pr) return;
     const { info } = w;
     const same = (repo?: string) => repo?.toLowerCase() === pr.repo.toLowerCase();
-    this.origin ??= { repo: originRepo(this.ctx.dir) };
+    this.origin ??= { repo: homeRepo(this.ctx.dir) };
     const other = same(this.origin.repo) ? undefined : info.repos?.find((r) => same(r.repo));
     if (!same(this.origin.repo) && !other) return;
     if ((other ?? info).pr?.number === pr.number) return;
@@ -168,13 +188,13 @@ export class WorkerPrs {
       const commits = (await run('git', ['log', '--reverse', '--format=%h %s', `${wt.base}..${branch}`], cwd)).split('\n').filter(Boolean);
       const dirty = (await run('git', ['status', '--porcelain'], cwd)) !== '';
       if (!commits.length) return dirty ? `${info.name} hasn't committed anything yet — ask it to commit first` : `${info.name} has no commits on ${branch} yet`;
-      const open = await findOpenPr(branch, cwd);
+      const open = await findOpenPr(branch, cwd, as);
       if (open) {
         info.pr = open;
         this.ctx.persist();
         return { prs: [{ ...open, existed: true, dirty }], failed: [] };
       }
-      await run('git', ['push', '-u', 'origin', branch], cwd, 90_000, as?.env);
+      await run('git', ['push', '-u', 'origin', branch], cwd, 90_000, pushAs(cwd, as));
       const base = await this.pushedBranch([wt.from, this.ctx.trees.currentBranch()], branch);
       const { title, body } = draftPr(info, commits, by);
       const { number, url } = await createPr(branch, base, title, body, cwd, as);
@@ -199,7 +219,7 @@ export class WorkerPrs {
   private async openPrs(w: Worker, by: string, as?: GhAs): Promise<{ prs: OpenedPr[]; failed: string[] } | string> {
     const { info } = w;
     const wt = info.worktree!;
-    const home = originRepo(this.ctx.dir);
+    const home = homeRepo(this.ctx.dir);
     const parts = [
       { name: path.basename(wt.path), dir: this.ctx.dir, ...wt, pr: info.pr, own: true, set: (pr: { number: number; url: string }) => (info.pr = pr) },
       ...info.repos!.map((r) => ({ ...r, own: false, set: (pr: { number: number; url: string }) => (r.pr = pr) })),
@@ -216,7 +236,7 @@ export class WorkerPrs {
         const cwd = path.join(this.ctx.dir, p.path);
         try {
           const dirty = (await run('git', ['status', '--porcelain'], cwd)) !== '';
-          const known = p.pr ?? (await findOpenPr(p.branch, cwd));
+          const known = p.pr ?? (await findOpenPr(p.branch, cwd, as));
           if (known) {
             p.set(known);
             prs.push({ repo: p.name, ...known, existed: true, dirty, cwd });
@@ -227,7 +247,7 @@ export class WorkerPrs {
             if (dirty) uncommitted.push(p.name);
             continue;
           }
-          await run('git', ['push', '-u', 'origin', p.branch], cwd, 90_000, as?.env);
+          await run('git', ['push', '-u', 'origin', p.branch], cwd, 90_000, pushAs(cwd, as));
           const base = await this.pushedBranch([p.from, new Worktrees(p.dir).currentBranch()], p.branch, p.dir);
           const { title, body } = draftPr(info, commits, by, p.own ? undefined : { home });
           const pr = await createPr(p.branch, base, title, body, cwd, as);
@@ -245,8 +265,14 @@ export class WorkerPrs {
       if (prs.length > 1 && prs.some((p) => !p.existed)) {
         for (const p of prs) {
           try {
+            const related = (body: string) => withRelated(body, relatedBlock(prs, p.url, wt.branch));
+            const gitlab = gitlabFloorAt(p.cwd);
+            if (gitlab) {
+              await editMrBody(gitlab, p.number, related, as?.env);
+              continue;
+            }
             const body = await gh(['pr', 'view', p.url, '--json', 'body', '--jq', '.body'], p.cwd, 30_000, as?.env);
-            const next = withRelated(body, relatedBlock(prs, p.url, wt.branch));
+            const next = related(body);
             if (next !== body) await gh(['pr', 'edit', p.url, '--body', next], p.cwd, 60_000, as?.env);
           } catch (err) {
             failed.push(`Couldn't list the other pull requests on ${p.repo} #${p.number}: ${(err as Error).message}`);
