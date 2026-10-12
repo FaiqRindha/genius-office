@@ -1,4 +1,5 @@
 import { test } from 'node:test';
+import { ROOF, sameRoom } from '../src/shared/rooftop.ts';
 import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
@@ -86,8 +87,11 @@ test('what you see of the campus: the office’s own building, and where each op
   // A GitLab project's floor is the first of its own building.
   assert.deepEqual(s.floors, { 'ada-api': [MAIN_BUILDING, 0], lobby: [MAIN_BUILDING, 1], app: [`${GITLAB_BUILDING}g/sub`, 0] });
   assert.deepEqual(campus.ids(), [MAIN_BUILDING]);
-  // On a GitLab floor, the world round you is drawn where the office's is.
-  assert.equal(campus.state(bob, `${GITLAB_BUILDING}g/sub`, defs, open).here, MAIN_BUILDING);
+  // On a GitLab floor, you're in its building (which stands on its plot in the Quarter).
+  assert.equal(campus.state(bob, `${GITLAB_BUILDING}g/sub`, defs, open).here, `${GITLAB_BUILDING}g/sub`);
+  // Its storey is its own for good, however many of the building's floors are opened (see gitlab-world.ts).
+  campus.levelOf = (f) => (f.gitlab ? 6 : undefined);
+  assert.deepEqual(campus.state(bob, MAIN_BUILDING, defs, open).floors, { 'ada-api': [MAIN_BUILDING, 0], lobby: [MAIN_BUILDING, 1], app: [`${GITLAB_BUILDING}g/sub`, 6] });
 });
 
 test('where you are on the campus: your floor’s building, else the last one you were in, else the office’s', () => {
@@ -125,4 +129,16 @@ test('out on the grounds is the street, the steps and the district; in the room 
   assert.equal(isOutdoors(-19, 0, 6.5), true, 'the landing outside the exit door');
   assert.equal(isOutdoors(0, STREET_Y, 27), true, 'the street');
   assert.equal(isOutdoors(0, 0, 16), true, 'the balcony');
+});
+
+test("every building has a rooftop of its own: up there, you're only with the people on yours", () => {
+  const roof = (b?: string) => ({ floor: ROOF, roof: b });
+  assert.equal(sameRoom(roof(MAIN_BUILDING), roof(MAIN_BUILDING)), true);
+  assert.equal(sameRoom(roof(`${GITLAB_BUILDING}g/sub`), roof(MAIN_BUILDING)), false);
+  assert.equal(sameRoom(roof(`${GITLAB_BUILDING}g/sub`), roof(`${GITLAB_BUILDING}g/sub`)), true);
+  // Someone from before roofs were anyone's is on whichever you're on.
+  assert.equal(sameRoom(roof(), roof(MAIN_BUILDING)), true);
+  // A floor is a floor, whatever building someone came up from before.
+  assert.equal(sameRoom({ floor: 'app', roof: 'x' }, { floor: 'app', roof: 'y' }), true);
+  assert.equal(sameRoom({ floor: 'app' }, roof(MAIN_BUILDING)), false);
 });

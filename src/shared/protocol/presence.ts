@@ -45,6 +45,8 @@ export interface PeerInfo {
   account?: boolean;
   /** The floor they're on (see FloorInfo); none while the building has no floors yet. */
   floor?: string;
+  /** Up on the roof (floor ROOF): whose building's (see campus), since every building has a rooftop of its own. */
+  roof?: string;
   /** What they have open, in their own words: "in Pixel's terminal", "reading PR #12". */
   doing?: string;
   /** Reading something off the bookshelf: an open book in their hands, its pages turning. */

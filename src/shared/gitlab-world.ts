@@ -5,6 +5,7 @@
 // floor (and moves it with the project). Districts and buildings keep the slot they were first
 // given, so nothing already standing moves when a project comes or goes. Pure: the server keeps it
 // up to date (see server/gitlab-world.ts) and the page draws it.
+import { PER_CELL } from './gitlab-quarter.js';
 
 /** A project on the GitLab, as the world needs it. */
 export interface WorldProject {
@@ -25,6 +26,8 @@ export interface WorldFloor {
   name: string;
   path: string;
   archived: boolean;
+  /** Which floor of its building it is, from the bottom (0): its own for good, opened or not. */
+  level: number;
 }
 
 export interface WorldBuilding {
@@ -55,6 +58,8 @@ export interface WorldSlots {
   buildings: Record<string, number>;
   /** The Quarter's cells, by "<district>#<n>": a district's nth cell. */
   cells?: Record<string, number>;
+  /** Each project's floor in its building, by "<building>#<project id>" (a move to another building is a new floor there). */
+  levels?: Record<string, number>;
 }
 
 export interface WorldState {
@@ -71,6 +76,11 @@ export interface WorldState {
 export const PERSONAL = '@personal';
 
 /** The district and building a project stands in. */
+/** How many storeys building `b` has: up to its top project's, empty ones (projects gone since) and all. */
+export function storeysOf(b: Pick<WorldBuilding, 'floors'>): number {
+  return b.floors.reduce((top, f) => Math.max(top, f.level + 1), 0);
+}
+
 export function placeOf(p: Pick<WorldProject, 'namespace' | 'personal'>): { district: string; building: string } {
   if (p.personal) return { district: PERSONAL, building: p.namespace };
   return { district: p.namespace.split('/')[0], building: p.namespace };
@@ -83,8 +93,6 @@ export function buildingName(key: string, district: string): string {
   return rest.length ? rest.join(' › ') : `${key} HQ`;
 }
 
-/** How many buildings a cell of the Quarter holds (see gitlab-quarter.ts). */
-const PER_CELL = 16;
 
 /** The smallest slot number nobody in `taken` has. */
 function freeSlot(taken: Set<number>): number {
@@ -137,15 +145,25 @@ function place(projects: readonly WorldProject[], slots: WorldSlots): { district
     const used = new Set<number>();
     for (const k of keys) if (slots.buildings[k] !== undefined && !used.has(slots.buildings[k])) used.add((next.buildings[k] = slots.buildings[k]));
     for (const k of keys.sort()) if (next.buildings[k] === undefined) used.add((next.buildings[k] = freeSlot(used)));
-    const buildings = keys.map((k) => ({
-      key: k,
-      name: buildingName(k, d),
-      slot: next.buildings[k],
-      floors: byBuilding
-        .get(k)!
-        .projects.sort((a, b) => a.id - b.id)
-        .map((p) => ({ projectId: p.id, name: p.name, path: p.path, archived: p.archived })),
-    }));
+    const buildings = keys.map((k) => {
+      // Each project keeps the floor it was given; a new one takes the lowest free floor, oldest first.
+      const projects = byBuilding.get(k)!.projects.sort((a, b) => a.id - b.id);
+      const used = new Set<number>();
+      const level = new Map<number, number>();
+      for (const p of projects) {
+        const was = slots.levels?.[`${k}#${p.id}`];
+        if (was !== undefined && !used.has(was)) used.add(was), level.set(p.id, was);
+      }
+      for (const p of projects) if (!level.has(p.id)) used.add(level.set(p.id, freeSlot(used)).get(p.id)!);
+      (next.levels ??= {});
+      for (const p of projects) next.levels[`${k}#${p.id}`] = level.get(p.id)!;
+      return {
+        key: k,
+        name: buildingName(k, d),
+        slot: next.buildings[k],
+        floors: projects.map((p) => ({ projectId: p.id, name: p.name, path: p.path, archived: p.archived, level: level.get(p.id)! })).sort((a, b) => a.level - b.level),
+      };
+    });
     return { key: d, name: d === PERSONAL ? 'Personal projects' : d, slot: next.districts[d], buildings: buildings.sort((a, b) => a.slot - b.slot) };
   });
   return { districts: districts.sort((a, b) => a.slot - b.slot), slots: next };

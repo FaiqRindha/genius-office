@@ -1,6 +1,6 @@
 // The balcony and the roof: the golf tee, the dart board and the axe lane, the gong and the DJ's air horn.
 import type { RooftopClientMsg } from '../../../shared/protocol.js';
-import { ROOF } from '../../../shared/rooftop.js';
+import { ROOF, sameRoom } from '../../../shared/rooftop.js';
 import { tossOk, type BarGame } from '../../../shared/bargames.js';
 import { throttle } from '../../office/client.js';
 import { num } from '../../office/input.js';
@@ -30,6 +30,6 @@ export const rooftopHandlers = {
   horn(ctx, c) {
     const who = c.peer.name;
     if (c.peer.floor !== ROOF || !throttle(c, 'horn', 1500)) return;
-    for (const o of ctx.clients.values()) if (o.peer.floor === ROOF) ctx.sendTo(o, { t: 'horn', by: who });
+    for (const o of ctx.clients.values()) if (sameRoom(o.peer, c.peer)) ctx.sendTo(o, { t: 'horn', by: who });
   },
 } satisfies HandlerMap<RooftopClientMsg>;

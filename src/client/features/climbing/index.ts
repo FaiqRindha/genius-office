@@ -7,7 +7,7 @@ import { LADDER, POLE, POLES, WALL_HEIGHT } from '../../../shared/layout';
 import type { FloorInfo } from '../../../shared/protocol';
 import { Climber, type Arrival, type Grip, type Way } from './controller';
 import type { Ctx } from '../../core/context';
-import { builtFloors } from '../../core/floors';
+import { builtFloors, storeys } from '../../core/floors';
 import { aside, hintTitle, key, onE } from '../../core/hint';
 import { DESK_KEYS } from '../../interaction';
 import { store } from '../../state';
@@ -34,9 +34,11 @@ export function installClimbing(ctx: Ctx, deps: ClimbingDeps) {
   const { office } = ctx;
   /** The floor above yours (1) or below it (-1), if there is one. */
   function floorThere(way: Way): FloorInfo | undefined {
+    // One storey up or down: none when that's an empty one (a GitLab project's floor not opened yet).
     const floors = builtFloors();
-    const i = floors.findIndex((f) => f.id === store.floor);
-    return i < 0 ? undefined : floors[i + way];
+    const at = storeys(floors);
+    const i = at.get(store.floor ?? '');
+    return i === undefined ? undefined : floors.find((f) => at.get(f.id) === i + way);
   }
   const climber = new Climber(ctx.player, {
     floorThere: (way) => floorThere(way)?.name,

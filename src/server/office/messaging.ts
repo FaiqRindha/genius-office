@@ -3,6 +3,7 @@ import type { Ctx, Messaging, ToastLevel } from './context.js';
 import type { Client } from './client.js';
 import type { Floor } from '../floor.js';
 import type { ServerMsg } from '../../shared/protocol.js';
+import { sameRoom } from '../../shared/rooftop.js';
 
 /** Sending to the browsers in `ctx.clients`: one, everyone, a floor, or someone's neighbors. */
 export function messaging(ctx: Ctx): Messaging {
@@ -35,7 +36,7 @@ export function messaging(ctx: Ctx): Messaging {
     if (!c.peer.floor) return;
     const json = JSON.stringify(msg);
     for (const o of ctx.clients.values()) {
-      if (o.id === c.id || o.peer.floor !== c.peer.floor || o.ws.readyState !== WebSocket.OPEN) continue;
+      if (o.id === c.id || !sameRoom(o.peer, c.peer) || o.ws.readyState !== WebSocket.OPEN) continue;
       if (droppable && o.ws.bufferedAmount > 4 * 1024 * 1024) continue;
       o.ws.send(json);
     }

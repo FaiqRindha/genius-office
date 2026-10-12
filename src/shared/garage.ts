@@ -1,5 +1,6 @@
 import { FLOOR, ROAD, WALL_T } from './layout.js';
 import { STREET_END, onLoop } from './scenic.js';
+import { onQuarterRoad } from './gitlab-quarter.js';
 
 // The Lambos and Ferraris in the garage, which anyone can drive: where they're parked, where you can
 // take them (the garage, the lots round it, the street and the scenic loop off either end of it), and
@@ -162,11 +163,21 @@ export function carPoint(p: { x: number; z: number; rotY: number }, lx: number, 
 
 /** Whether (x, z) is somewhere a car can be: the garage, the lots, the street or the loop. */
 export function paved(x: number, z: number): boolean {
-  return PAVEMENT.some((b) => x >= b.minX && x <= b.maxX && z >= b.minZ && z <= b.maxZ) || onLoop(x, z);
+  return PAVEMENT.some((b) => x >= b.minX && x <= b.maxX && z >= b.minZ && z <= b.maxZ) || onLoop(x, z) || onQuarterRoad(x, z);
 }
 
-/** Whether the whole car is on the pavement: its corners, and halfway along each side. */
-export function onPavement(p: { x: number; z: number; rotY: number }): boolean {
+/** Where a floor stands in the world: its cars' poses are its own, from its middle (see Grounds). */
+export interface Origin {
+  x: number;
+  z: number;
+}
+const HOME: Origin = { x: 0, z: 0 };
+
+/**
+ * Whether the whole car is on the pavement: its corners, and halfway along each side. The car's on
+ * a floor standing at `at` in the world (the office's own is at 0, 0; a GitLab building's on its plot).
+ */
+export function onPavement(p: { x: number; z: number; rotY: number }, at: Origin = HOME): boolean {
   const w = CAR.width / 2;
   const l = CAR.length / 2;
   for (const [lx, lz] of [
@@ -179,8 +190,8 @@ export function onPavement(p: { x: number; z: number; rotY: number }): boolean {
     [0, l],
     [0, -l],
   ]) {
-    const at = carPoint(p, lx, lz);
-    if (!paved(at.x, at.z)) return false;
+    const q = carPoint(p, lx, lz);
+    if (!paved(q.x + at.x, q.z + at.z)) return false;
   }
   return true;
 }
@@ -205,9 +216,9 @@ export function overlaps(p: { x: number; z: number; rotY: number }, b: Box): boo
   return true;
 }
 
-/** Whether the car can be at `p`: on the pavement, clear of all of `solids`. */
-export function carFits(p: { x: number; z: number; rotY: number }, solids: Iterable<Box>): boolean {
-  if (!onPavement(p)) return false;
+/** Whether the car can be at `p`: on the pavement (on a floor standing at `at`), clear of all of `solids`. */
+export function carFits(p: { x: number; z: number; rotY: number }, solids: Iterable<Box>, at: Origin = HOME): boolean {
+  if (!onPavement(p, at)) return false;
   for (const b of solids) if (overlaps(p, b)) return false;
   return true;
 }

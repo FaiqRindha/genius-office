@@ -7,8 +7,23 @@ import { store } from '../../state';
 // Where things are in the campus's one world: each building where it stands, and the floor you're on
 // built where it always is, round the middle of the one you're in (see shared/campus.ts).
 
-/** Where building `id` stands in the world (see buildingAt). */
+/**
+ * Where a building that isn't the campus's own stands, if `id` is one: another feature's buildings
+ * (the GitLab Quarter's, see features/gitlab-world), added with `addPlace`.
+ */
+const places: ((id: string) => { x: number; z: number } | undefined)[] = [];
+
+/** Has `where` say where the buildings it knows stand (see standsAt). */
+export function addPlace(where: (id: string) => { x: number; z: number } | undefined) {
+  places.push(where);
+}
+
+/** Where building `id` stands in the world (see buildingAt, and addPlace). */
 export function standsAt(id: string): { x: number; z: number } {
+  for (const where of places) {
+    const at = where(id);
+    if (at) return at;
+  }
   return buildingAt(Math.max(0, store.campus.buildings.findIndex((b) => b.id === id)));
 }
 

@@ -38,11 +38,12 @@ export function openBuildingDoor(net: Net, b: WorldBuilding, ride: (floor: strin
   const render = () => {
     const levels = store.gitlabAccess;
     // Top floor first, the way an elevator's buttons stack.
-    const rows = [...b.floors].reverse().map((f, i) => {
+    const rows = [...b.floors].sort((x, y) => y.level - x.level).map((f) => {
       const level = levels?.[f.projectId];
       const role = roleOf(level);
       const locked = !!levels && !role;
-      const n = b.floors.length - i;
+      // Its own storey for good (see WorldFloor.level).
+      const n = f.level + 1;
       const btn = h(
         'button.gl-floor',
         { type: 'button', class: locked ? 'locked' : '', disabled: locked || going !== null, title: locked ? `You're not a member of ${f.path} on GitLab` : `Go up to ${f.path}` },

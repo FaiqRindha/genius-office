@@ -32,6 +32,8 @@ export function navigation(ctx: Ctx): Navigation {
     if (c.peer.floor === ROOF) return;
     const left = leave(c);
     c.peer.floor = ROOF;
+    // The roof of the building they rode up (each has its own: see sameRoom).
+    c.peer.roof = ctx.hereOf(c);
     ctx.sendFloors(c);
     ctx.sendTo(c, { t: 'floor.enter', peers: [...ctx.clients.values()].map((o) => o.peer), ...roofView(ctx) });
     arrived(c, left);

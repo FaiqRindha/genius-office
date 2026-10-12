@@ -159,24 +159,28 @@ test('the world is of the GitLab most people are signed in to', async () => {
   assert.deepEqual([world.state()?.url, world.state()?.projects], [URL_, 2]);
 });
 
-test("the Quarter's cells stand on land, clear of the beach, and every plot in its cell", async () => {
-  const { cellAt, plotAt, inQuarter, QUARTER, PER_CELL, BLOCK, CELLS } = await import('../src/shared/gitlab-quarter.ts');
-  assert.equal(CELLS, 20);
+test("the Quarter's cells stand on land, clear of the beach, and a whole office building fits every plot", async () => {
+  const { cellAt, plotAt, inQuarter, QUARTER, PER_CELL, CELLS, STREET_W } = await import('../src/shared/gitlab-quarter.ts');
+  const { shoreX } = await import('../src/shared/scenic.ts');
+  assert.equal(CELLS, 30);
+  assert.equal(PER_CELL, 6);
   // Past them, a district isn't put up off the edge of the world.
   assert.equal(plotAt([CELLS], 0), undefined);
-  const { shoreX } = await import('../src/shared/scenic.ts');
   for (let c = 0; c < CELLS; c++) {
     const at = cellAt(c);
     assert.ok(at.x - QUARTER.cellW / 2 > shoreX(at.z) + 26, `cell ${c} is in the sea`);
     assert.ok(at.z - QUARTER.cellD / 2 >= QUARTER.minZ, `cell ${c} is off the map`);
     for (let i = 0; i < PER_CELL; i++) {
       const p = plotAt([c], i)!;
-      assert.ok(Math.abs(p.x - at.x) + BLOCK.pitchX / 2 <= QUARTER.cellW / 2 && Math.abs(p.z - at.z) + BLOCK.pitchZ / 2 <= QUARTER.cellD / 2, `plot ${i} of cell ${c}`);
+      // An office building, from its card reader to its east wall and from its wing to its steps,
+      // inside its cell's streets (see BLOCK).
+      assert.ok(p.x - 20.5 > at.x - QUARTER.cellW / 2 + STREET_W / 2 && p.x + 18.3 < at.x + QUARTER.cellW / 2 - STREET_W / 2, `plot ${i} of cell ${c} across`);
+      assert.ok(p.z - 22.2 > at.z - QUARTER.cellD / 2 + STREET_W / 2 && p.z + 13.3 < at.z + QUARTER.cellD / 2 - STREET_W / 2 + 0.01, `plot ${i} of cell ${c} deep`);
       assert.ok(inQuarter(p.x, p.z));
     }
   }
-  // The path up from town is clear of trees too, and the town isn't the Quarter.
-  assert.ok(inQuarter(-36, -150));
+  // The road up from town is clear of trees too, and the town isn't the Quarter.
+  assert.ok(inQuarter(-34, -150));
   assert.equal(inQuarter(0, 0), false);
 });
 
@@ -184,23 +188,89 @@ test('a district with more buildings than a cell holds takes another, and nobody
   const many = Array.from({ length: 20 }, (_, i) => p(100 + i, `big/sub${String(i).padStart(2, '0')}/app`));
   const first = arrange([p(1, 'aaa/x'), ...many.slice(0, 10)]);
   const cellsOf = (r: ReturnType<typeof arrange>) => Object.fromEntries(r.districts.map((d) => [d.key, d.cells]));
-  assert.deepEqual(cellsOf(first), { aaa: [0], big: [1] });
+  // Six buildings a cell: big's ten take two.
+  assert.deepEqual(cellsOf(first), { aaa: [0], big: [1, 2] });
   const later = arrange([p(1, 'aaa/x'), ...many, p(200, 'zzz/y')], first.slots);
-  // A new district's first cell comes before anyone's second: zzz gets 2, big's 17th to 20th go in 3.
-  assert.deepEqual(cellsOf(later), { aaa: [0], big: [1, 3], zzz: [2] });
+  // A new district's first cell comes before anyone's next: zzz gets 3, big's third and fourth 4 and 5.
+  assert.deepEqual(cellsOf(later), { aaa: [0], big: [1, 2, 4, 5], zzz: [3] });
 });
 
-test('a building looks the same every time, and fits on its plot', async () => {
-  const { styleOf, MAX_STOREYS } = await import('../src/client/features/gitlab-world/style.ts');
-  assert.deepEqual(styleOf('genius/genius-lab', 3), styleOf('genius/genius-lab', 3));
-  const looks = new Set<string>();
-  for (let i = 0; i < 200; i++) {
-    const s = styleOf(`group/ns${i}`, i % 40);
-    looks.add(`${s.shape}|${s.roof}|${s.windows}|${s.facade}`);
-    // A podium's base is 6 m wider and 4 m deeper than it: still inside a 34 × 36 plot, with room round it.
-    assert.ok((s.shape === 'podium' ? s.w + 6 : s.w) <= 32 && (s.shape === 'podium' ? s.d + 4 : s.d) <= 32, `${s.shape} ${s.w}×${s.d}`);
-    assert.ok(s.storeys >= 2 && s.storeys <= MAX_STOREYS);
+test("the Quarter's roads are one network, joined to the main street, and a car drives every one of them", async () => {
+  const { QUARTER_ROADS, QUARTER_PATH, QUARTER, onQuarterRoad } = await import('../src/shared/gitlab-quarter.ts');
+  const { onPavement, paved } = await import('../src/shared/garage.ts');
+  const { ROAD } = await import('../src/shared/layout.ts');
+  // Every stretch meets another, all the way back to the road up from the main street.
+  const touch = (a: (typeof QUARTER_ROADS)[number], b: (typeof QUARTER_ROADS)[number]) => a.minX <= b.maxX && b.minX <= a.maxX && a.minZ <= b.maxZ && b.minZ <= a.maxZ;
+  const reached = new Set([0]);
+  for (let grew = true; grew; ) {
+    grew = false;
+    QUARTER_ROADS.forEach((r, i) => {
+      if (!reached.has(i) && [...reached].some((j) => touch(QUARTER_ROADS[j], r))) (reached.add(i), (grew = true));
+    });
   }
-  // Varied: most of two hundred namespaces look unlike each other.
-  assert.ok(looks.size > 150, `${looks.size} looks`);
+  assert.equal(reached.size, QUARTER_ROADS.length);
+  // The way up starts on the main street.
+  assert.ok(QUARTER_ROADS[0].maxZ >= ROAD.minZ && paved(QUARTER_PATH.x, (ROAD.minZ + ROAD.maxZ) / 2));
+  // A car fits down the middle of every stretch, either way it's pointing.
+  for (const r of QUARTER_ROADS) {
+    const along = r.maxX - r.minX > r.maxZ - r.minZ;
+    const cx = (r.minX + r.maxX) / 2;
+    const cz = (r.minZ + r.maxZ) / 2;
+    for (let t = 0.04; t < 1; t += 0.04) {
+      const x = along ? r.minX + (r.maxX - r.minX) * t : cx;
+      const z = along ? cz : r.minZ + (r.maxZ - r.minZ) * t;
+      for (const rotY of along ? [Math.PI / 2, -Math.PI / 2] : [0, Math.PI]) assert.ok(onPavement({ x, z, rotY }), `car at ${x.toFixed(0)},${z.toFixed(0)}`);
+    }
+  }
+  // Off the roads is still the meadow (and the lawn the garage test keeps unpaved stays so).
+  assert.equal(onQuarterRoad(QUARTER_PATH.x + 20, -150), false);
+  assert.equal(onPavement({ x: -40, z: 18, rotY: 0 }), false);
+  assert.ok(onQuarterRoad(QUARTER.x, QUARTER.z - 500));
+});
+
+test("nothing of the Quarter's stands on its roads, and every garage opens onto one", async () => {
+  const { QUARTER_ROADS, QUARTER_GARAGES, plotAt, PER_CELL, CELLS } = await import('../src/shared/gitlab-quarter.ts');
+  const { onPavement } = await import('../src/shared/garage.ts');
+  const overlaps = (a: { minX: number; maxX: number; minZ: number; maxZ: number }) => QUARTER_ROADS.some((r) => a.minX < r.maxX && r.minX < a.maxX && a.minZ < r.maxZ && r.minZ < a.maxZ);
+  for (let c = 0; c < CELLS; c++) {
+    for (let i = 0; i < PER_CELL; i++) {
+      const at = plotAt([c], i)!;
+      // The office building that stands on it, inside or out (reader to east wall, wing to steps).
+      assert.equal(overlaps({ minX: at.x - 20.5, maxX: at.x + 18.3, minZ: at.z - 22.2, maxZ: at.z + 13.3 }), false, `office on plot ${i} of cell ${c}`);
+    }
+  }
+  // From each garage a car drives straight out onto its road: from its back, south to the road.
+  for (const g of QUARTER_GARAGES.slice(0, 12)) {
+    const x = (g.minX + g.maxX) / 2;
+    for (let z = g.minZ + 3; z < g.maxZ + 4; z += 1) assert.ok(onPavement({ x, z, rotY: 0 }), `garage at ${x},${z}`);
+  }
+});
+
+test("a GitLab floor you're not a member of is locked in the elevator; one you are, or that isn't GitLab's, isn't", async () => {
+  const { store } = await import('../src/client/state/index.ts');
+  const { gitlabLocked } = await import('../src/client/ui/elevator-gitlab.ts');
+  const world = arrange([p(7, 'g/sub/app'), p(8, 'g/sub/tool')]);
+  store.gitlabWorld = { url: 'https://akhlak.example', districts: world.districts, projects: 2, syncedAt: 0 };
+  // Your roles not in yet: not locked (the office checks when you go).
+  store.gitlabAccess = null;
+  assert.equal(gitlabLocked({ gitlab: 'https://akhlak.example/g/sub/app' }), false);
+  store.gitlabAccess = { 7: 30 };
+  assert.equal(gitlabLocked({ gitlab: 'https://akhlak.example/g/sub/app' }), false);
+  assert.equal(gitlabLocked({ gitlab: 'https://akhlak.example/g/sub/tool' }), true);
+  assert.equal(gitlabLocked({}), false);
+});
+
+test("each project's floor is its own for good: the same storey whatever comes, goes or is opened", () => {
+  const storeys = (r: ReturnType<typeof arrange>, key: string) => Object.fromEntries(r.districts.flatMap((d) => d.buildings).find((b) => b.key === key)!.floors.map((f) => [f.name, f.level + 1]));
+  const first = arrange(AKHLAK);
+  // Oldest project first, from the bottom.
+  assert.deepEqual(storeys(first, 'genius/genius-lab'), { skynet: 1, 'mkbot-sky': 2, benchmark_databench: 3 });
+  assert.deepEqual(arrange(AKHLAK, first.slots), first, 'arranged again, nothing moves');
+  // mkbot-sky goes: nothing above it moves down, and its storey stays empty till a newcomer takes it.
+  const gone = arrange(AKHLAK.filter((x) => x.id !== 4), first.slots);
+  assert.deepEqual(storeys(gone, 'genius/genius-lab'), { skynet: 1, benchmark_databench: 3 });
+  const added = arrange([...AKHLAK.filter((x) => x.id !== 4), p(20, 'genius/genius-lab/newbie'), p(21, 'genius/genius-lab/later')], gone.slots);
+  assert.deepEqual(storeys(added, 'genius/genius-lab'), { skynet: 1, newbie: 2, benchmark_databench: 3, later: 4 });
+  // Floors come bottom up.
+  assert.deepEqual(added.districts.flatMap((d) => d.buildings).find((b) => b.key === 'genius/genius-lab')!.floors.map((f) => f.level), [0, 1, 2, 3]);
 });

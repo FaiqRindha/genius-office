@@ -37,3 +37,4 @@
 /* The folder's Change button: styles/base.css, after the button rules it restyles. */
 .elevator .dir-pick { margin-top: 8px; }
 .elevator .err { margin: 8px 0 0; font-size: 13px; font-weight: 800; color: var(--bad); overflow-wrap: anywhere; }
+.elevator .floor-btn.locked { background: #eceff1; color: #6c757d; box-shadow: none; }

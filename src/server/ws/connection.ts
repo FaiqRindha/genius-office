@@ -56,6 +56,7 @@ export function onConnection(ctx: Ctx, ws: WebSocket, url: URL, session: Session
     ...(url.searchParams.get('lite') === '1' ? { lite: true } : {}),
     ...(onRoof ? { floor: ROOF } : floor ? { floor: floor.id } : {}),
   });
+  if (onRoof) client.peer.roof = ctx.hereOf(client);
   // Maps of your own may have been added or edited since: everyone already in hears first.
   const mapWas = maps.pick();
   if (maps.reload()) mapNews(ctx, mapWas);

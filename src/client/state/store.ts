@@ -10,6 +10,7 @@
 
 import type { ChatLine, FloorInfo, FloorView, GhIssue, GhPull, GhState, Me, PeerInfo, ProjectInfo, ProjectsDirState, QueueState, QueueTask, RepoChoice, Run, ServerMsg, WorkerInfo } from '../../shared/protocol';
 import { randomLook } from '../../shared/avatar';
+import { ROOF } from '../../shared/rooftop';
 import { AVATAR_COLORS, type Profile } from './persist';
 
 /** A worker's terminal as its laptop shows it, put together from the office's 'screen' frames. */
@@ -152,7 +153,8 @@ export class Store {
 
   /** Whether someone is on your floor (people on other floors aren't in the room with you). */
   onMyFloor(peer: PeerInfo): boolean {
-    return (peer.floor ?? null) === this.floor;
+    // Up on the roof, it's the roof of the building you're in: every building has its own.
+    return (peer.floor ?? null) === this.floor && (this.floor !== ROOF || !peer.roof || peer.roof === this.campus.here);
   }
 
   workerAtDesk(deskId: string): WorkerInfo | undefined {

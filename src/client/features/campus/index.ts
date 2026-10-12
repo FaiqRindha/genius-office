@@ -35,8 +35,9 @@ export function installCampus(ctx: Ctx, parts: Pick<Parts, 'travel'>) {
     const at = standsAt(store.campus.here);
     office.grounds.setOffset(at.x, at.z);
     world.set(store.campus, at);
+    // The golf's the main street's; the cars are each building's own, in its garage (they drive where it stands: see Grounds.offset).
     const away = at.x !== 0 || at.z !== 0;
-    for (const it of office.interactables) if (it.kind === 'car' || it.kind === 'golf') it.off = away;
+    for (const it of office.interactables) if (it.kind === 'golf') it.off = away;
   };
   // Walking in through a door, the world moves once you're on the other side of it.
   let held = false;
