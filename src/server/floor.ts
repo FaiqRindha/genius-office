@@ -50,6 +50,8 @@ export interface FloorContext {
    * sign-in, the office's (undefined), or why it can't.
    */
   ghAs(owner: string | undefined, gitlab?: string): GhAs | undefined | string;
+  /** Where a floor stands in the world (a GitLab project's on its building's plot in the Quarter); the office's own at 0, 0. */
+  worldAt?(def: FloorDef): { x: number; z: number };
   /** The boards of a floor whose project is on a GitLab (see gitlab-boards.ts). */
   gitlabBoards?(def: FloorDef, onIssues: (s: GhState<GhIssue>) => void, onPulls: (s: GhState<GhPull>) => void): Boards;
   /** To everyone on this floor. */
@@ -138,7 +140,7 @@ export class Floor {
   /** The basketball by the hoop: who has it, or how it was last thrown. */
   readonly court = new Court();
   /** The cars in the garage: who's in which, and where their drivers have left them. */
-  readonly garage = new Garage();
+  readonly garage = new Garage(undefined, () => this.ctx.worldAt?.(this.def) ?? { x: 0, z: 0 });
   /** Workers sent home on a map that locks them up (see MapPlan.sendHome). */
   readonly jail: Jail;
   private timer: NodeJS.Timeout;

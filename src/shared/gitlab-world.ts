@@ -5,6 +5,7 @@
 // floor (and moves it with the project). Districts and buildings keep the slot they were first
 // given, so nothing already standing moves when a project comes or goes. Pure: the server keeps it
 // up to date (see server/gitlab-world.ts) and the page draws it.
+import { PER_CELL } from './gitlab-quarter.js';
 
 /** A project on the GitLab, as the world needs it. */
 export interface WorldProject {
@@ -83,8 +84,6 @@ export function buildingName(key: string, district: string): string {
   return rest.length ? rest.join(' › ') : `${key} HQ`;
 }
 
-/** How many buildings a cell of the Quarter holds (see gitlab-quarter.ts). */
-const PER_CELL = 16;
 
 /** The smallest slot number nobody in `taken` has. */
 function freeSlot(taken: Set<number>): number {

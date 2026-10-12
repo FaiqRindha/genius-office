@@ -26,6 +26,8 @@ declare module '../types' {
 export interface Grounds {
   /** The building you're in stands at (x, z) in the world (the office's own is at 0, 0): the world's drawn round it. */
   setOffset(x: number, z: number): void;
+  /** Where the building you're in stands (see setOffset): your floor's cars drive where it is. */
+  offset(): { x: number; z: number };
 }
 
 /** The parts of the street that are the world's (see the note above): built where they stand, and moved off as one. */
@@ -94,6 +96,7 @@ export function downstairs<P extends Fixture<never, StreetSite>[]>(...parts: P):
         night.shift = { x, z };
         night.street += 1e-6;
       },
+      offset: () => off,
     };
     return {
       handle: { grounds },

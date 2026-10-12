@@ -6,6 +6,8 @@ import { Floor, type FloorContext } from '../floor.js';
 import { withGitLab } from '../gitlab.js';
 import { GitLabBoards } from '../gitlab-boards.js';
 import { setGitLabFloor } from '../forge.js';
+import { GITLAB_BUILDING } from '../campus.js';
+import { plotAt } from '../../shared/gitlab-quarter.js';
 import { ROOF } from '../../shared/rooftop.js';
 import { MAIN_BUILDING, type FloorInfo, type ServerMsg } from '../../shared/protocol.js';
 import type { Ctx, FloorHelpers, FloorsOpen } from './context.js';
@@ -162,6 +164,17 @@ export async function openFloors(ctx: Ctx, hookPort: number): Promise<FloorsOpen
     locksUp: () => !!ctx.maps.plan().sendHome?.keeps,
     runAs: withGitLab(ctx.signins, ctx.gitlab),
     ghAs: (owner, gitlab) => (owner ? (gitlab ? ctx.gitlab.ghAs(owner) : ctx.signins.ghAs(owner)) : undefined),
+    worldAt: (def) => {
+      // Its namespace's building's plot in the Quarter (see campus.ts and gitlab-quarter.ts).
+      const building = ctx.campus.of(def);
+      if (!building.startsWith(GITLAB_BUILDING)) return { x: 0, z: 0 };
+      const key = building.slice(GITLAB_BUILDING.length);
+      for (const d of ctx.gitlabWorld.state()?.districts ?? []) {
+        const b = d.buildings.find((x) => x.key === key);
+        if (b) return plotAt(d.cells, b.slot) ?? { x: 0, z: 0 };
+      }
+      return { x: 0, z: 0 };
+    },
     gitlabBoards: (def, onIssues, onPulls) => {
       const reader = () => ctx.gitlab.reader(def.gitlab!, def.gitlabAccount);
       // Its checkout's git and pull requests ask for it by folder (see forge.ts).

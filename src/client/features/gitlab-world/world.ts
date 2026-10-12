@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { CELLS, QUARTER, QUARTER_ROADS, cellAt, plotAt } from '../../../shared/gitlab-quarter';
+import { BUILDING_Z, CELLS, QUARTER, QUARTER_GARAGES, QUARTER_ROADS, STREET_W, cellAt, frontOf, plotAt } from '../../../shared/gitlab-quarter';
 import type { WorldBuilding, WorldDistrict, WorldState } from '../../../shared/gitlab-world';
 import { STOREY, STREET_Y } from '../../../shared/layout';
 import { mergeByColor, mesh, textPlane, toon } from '../../world/toon';
@@ -27,8 +27,12 @@ declare module '../../world/types' {
 export interface GitLabQuarter {
   /** Puts up the world as `state` has it (none: takes it down). */
   set(state: WorldState | null): void;
-  /** Where the building you're in stands in the world (see standsAt): what's in the way moves round it. */
-  setHere(at: { x: number; z: number }): void;
+  /**
+   * Where the building you're in stands in the world (see standsAt): what's in the way moves round
+   * it. `inside`: the Quarter building that is (its namespace), which isn't put up while you're in
+   * it, since its floors stand there instead.
+   */
+  setHere(at: { x: number; z: number }, inside?: string): void;
   /** Each building's door, where it is on the floor you're on (E there to go in: see index.ts). */
   doors: Interactable[];
 }
@@ -193,20 +197,19 @@ function bare(t: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>) {
   return t;
 }
 
-/** A gate over the way into a district: two pillars, a beam, and its group's name. */
-function gate(name: string, buildings: number): THREE.Group {
+/** A district's sign, up on a post on its corner, its board out over the street beside it (clear of its buildings): its group's name, both ways along the avenue. */
+function pylon(name: string, buildings: number): THREE.Group {
   const g = new THREE.Group();
-  const stone = toon('#6c757d');
-  for (const side of [-1, 1]) g.add(mesh(new THREE.BoxGeometry(1.4, 9, 1.4), stone, side * 9, 4.5, 0));
-  g.add(mesh(new THREE.BoxGeometry(20, 1.6, 1.6), toon('#2b2d42'), 0, 9.6, 0));
+  g.add(mesh(new THREE.BoxGeometry(1.2, 11, 1.2), toon('#6c757d'), 0, 5.5, 0));
+  g.add(mesh(new THREE.BoxGeometry(16, 3.4, 0.8), toon('#2b2d42'), -7, 11.6, 0));
   for (const back of [false, true]) {
     const t = bare(textPlane(`🦊 ${name}`, { size: 72, color: '#fffaf3' }));
-    t.scale.setScalar(Math.min(6, 17 / (t.geometry.parameters.width || 1)));
-    t.position.set(0, 9.6, back ? -0.82 : 0.82);
+    t.scale.setScalar(Math.min(4.5, 14.5 / (t.geometry.parameters.width || 1)));
+    t.position.set(-7, 12.1, back ? -0.42 : 0.42);
     if (back) t.rotation.y = Math.PI;
-    const sub = textPlane(`${buildings} building${buildings === 1 ? '' : 's'}`, { size: 40, color: '#2b2d42', bg: '#ffd6a5' });
-    sub.scale.setScalar(2.2);
-    sub.position.set(0, 7.9, back ? -0.82 : 0.82);
+    const sub = bare(textPlane(`${buildings} building${buildings === 1 ? '' : 's'}`, { size: 40, color: '#ffd6a5' }));
+    sub.scale.setScalar(1.8);
+    sub.position.set(-7, 10.6, back ? -0.42 : 0.42);
     if (back) sub.rotation.y = Math.PI;
     g.add(t, sub);
   }
@@ -248,6 +251,9 @@ export function buildQuarter(ground: THREE.Group, colliders: Collider[]) {
   root.name = 'gitlab-quarter';
   ground.add(root);
   let built = '';
+  let shown: WorldState | null = null;
+  /** The Quarter building you're in, if you're in one: not put up (its floors are there instead). */
+  let inside: string | undefined;
   let here = { x: 0, z: 0 };
   let drop = 0;
   let mine: { c: Collider; base: Collider }[] = [];
@@ -271,7 +277,7 @@ export function buildQuarter(ground: THREE.Group, colliders: Collider[]) {
     const used = state.districts.flatMap((d) => d.cells).filter((c) => c < CELLS);
     for (const c of used) {
       const at = cellAt(c);
-      box(g, PAVE, QUARTER.cellW - 14, 0.06, QUARTER.cellD - 14, at.x, G, at.z);
+      box(g, PAVE, QUARTER.cellW - 14, 0.03, QUARTER.cellD - 14, at.x, G, at.z);
     }
     for (const r of QUARTER_ROADS) road(g, r);
     return mergeByColor(g);
@@ -296,8 +302,13 @@ export function buildQuarter(ground: THREE.Group, colliders: Collider[]) {
     const solid = new THREE.Group();
     const signs = new THREE.Group();
     for (const b of d.buildings) {
-      const at = plotAt(d.cells, b.slot);
-      if (!at) continue;
+      const plot = plotAt(d.cells, b.slot);
+      // You're in it: its floors stand on its plot, over its garage (see Grounds).
+      if (!plot || b.key === inside) continue;
+      // Its garage, out to the road along its front (see QUARTER_GARAGES), under where it stands.
+      const pad = QUARTER_GARAGES.find((q) => plot.x > q.minX && plot.x < q.maxX && plot.z > q.minZ && plot.z < q.maxZ);
+      if (pad) box(solid, '#b8b2a7', pad.maxX - pad.minX, 0.04, pad.maxZ - pad.minZ, (pad.minX + pad.maxX) / 2, G, (pad.minZ + pad.maxZ) / 2);
+      const at = { x: plot.x, z: plot.z + BUILDING_Z };
       const { group, style, height } = building(b);
       group.position.set(at.x, G, at.z);
       solid.add(group);
@@ -315,19 +326,21 @@ export function buildQuarter(ground: THREE.Group, colliders: Collider[]) {
       door.userData.interact = it;
       signs.add(door);
     }
-    // The gate, on the avenue along the front of its first cell.
+    // Its sign, on the corner of its first cell where the avenue along its front meets the street down its west side.
     const c = cellAt(d.cells[0]);
-    const gz = c.z + QUARTER.cellD / 2 - 8;
-    const g = gate(d.name, d.buildings.length);
-    g.position.set(c.x, G, gz);
+    const px = c.x - QUARTER.cellW / 2 + STREET_W / 2 + 2.2;
+    const pz = frontOf(d.cells[0]) - STREET_W / 2 - 1.6;
+    const g = pylon(d.name, d.buildings.length);
+    g.position.set(px, G, pz);
     signs.add(g);
-    for (const side of [-1, 1]) add({ minX: c.x + side * 9 - 0.7, maxX: c.x + side * 9 + 0.7, minZ: gz - 0.7, maxZ: gz + 0.7, bottom: G, top: G + 9 });
+    add({ minX: px - 0.6, maxX: px + 0.6, minZ: pz - 0.6, maxZ: pz + 0.6, bottom: G, top: G + 11 });
     return [mergeByColor(solid), signs];
   };
 
   const set = (state: WorldState | null) => {
+    shown = state;
     // Only rebuilt when what it shows changed (not on every look the server takes).
-    const key = state ? JSON.stringify(state.districts.map((d) => [d.key, d.cells, d.buildings.map((b) => [b.key, b.slot, b.name, b.floors.length])])) : '';
+    const key = state ? JSON.stringify([inside, state.districts.map((d) => [d.key, d.cells, d.buildings.map((b) => [b.key, b.slot, b.name, b.floors.length])])]) : '';
     if (key === built) return;
     built = key;
     for (const o of [...root.children]) dispose(o);
@@ -348,8 +361,12 @@ export function buildQuarter(ground: THREE.Group, colliders: Collider[]) {
     world: {
       set,
       doors,
-      setHere(at: { x: number; z: number }) {
+      setHere(at: { x: number; z: number }, building?: string) {
         here = at;
+        if (building !== inside) {
+          inside = building;
+          set(shown);
+        }
         place();
       },
     } satisfies GitLabQuarter,

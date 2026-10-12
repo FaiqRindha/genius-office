@@ -12,6 +12,8 @@ export interface DriveHooks {
   moved(car: number, pose: CarPose): void;
   /** You ran into something at `speed` m/s, at (x, z). */
   bump(at: { x: number; z: number }, speed: number): void;
+  /** Where the floor you're on stands in the world: the pavement's the world's (see paved). The office's own when unsaid. */
+  at?(): { x: number; z: number };
 }
 
 /** How often the office hears where your car is, at most (seconds). */
@@ -176,12 +178,14 @@ export class Driver {
   private move(from: CarPose, pedals: Pedals, dt: number, solids: Box[]): CarPose {
     const n = Math.max(1, Math.ceil((Math.abs(from.speed) * dt) / STEP));
     const h = dt / n;
+    const at = this.hooks.at?.() ?? { x: 0, z: 0 };
+    const fits = (p: CarPose) => carFits(p, solids, at);
     // Already in something (someone parked on top of you): drive out of it any way you like.
-    const stuck = !carFits(from, solids);
+    const stuck = !fits(from);
     let pose = from;
     for (let i = 0; i < n; i++) {
       const next = drive(pose, pedals, h);
-      if (stuck ? onPavement(next) : carFits(next, solids)) {
+      if (stuck ? onPavement(next, at) : fits(next)) {
         pose = next;
         continue;
       }
@@ -194,15 +198,17 @@ export class Driver {
       const slides: { to: CarPose; keep: number; heading: number; off: { x: number; z: number } }[] = [
         { to: { ...next, z: pose.z }, keep: Math.abs(dx) / want, heading: Math.sign(dx) * (Math.PI / 2), off: { x: 0, z: -Math.sign(dz) } },
         { to: { ...next, x: pose.x }, keep: Math.abs(dz) / want, heading: dz > 0 ? 0 : Math.PI, off: { x: -Math.sign(dx), z: 0 } },
-      ].filter((q) => q.keep > 0.25 && carFits(q.to, solids));
-      const road = nearLoop(pose.x, pose.z);
+      ].filter((q) => q.keep > 0.25 && fits(q.to));
+      // The loop's the world's: where it is on the floor you're on.
+      const near = nearLoop(pose.x + at.x, pose.z + at.z);
+      const road = near && { ...near, x: near.x - at.x, z: near.z - at.z };
       if (road && road.off < LOOP_PAVED + 2) {
         // Along the road here, and in off its edge toward the middle: round the outside of a bend,
         // going straight on along it runs a little off, so it's nudged back in as it goes.
         const run = dx * road.tx + dz * road.tz;
         const inward = road.off > 1e-6 ? { x: (road.x - pose.x) / road.off, z: (road.z - pose.z) / road.off } : { x: 0, z: 0 };
         const base = { ...next, x: pose.x + road.tx * run, z: pose.z + road.tz * run };
-        const to = [0, 0.04, 0.12, 0.25].map((d) => ({ ...base, x: base.x + inward.x * d, z: base.z + inward.z * d })).find((q) => carFits(q, solids));
+        const to = [0, 0.04, 0.12, 0.25].map((d) => ({ ...base, x: base.x + inward.x * d, z: base.z + inward.z * d })).find(fits);
         const keep = Math.abs(run) / want;
         if (to && keep > 0.25) slides.push({ to, keep, heading: Math.atan2(road.tx * Math.sign(run), road.tz * Math.sign(run)), off: inward });
       }
@@ -215,7 +221,7 @@ export class Driver {
         const rotY = wrap(slid.rotY + wrap(heading - slid.rotY) * 0.3);
         // Swinging round about its middle takes its far end into it: a nudge off it, the way it came.
         const off = along.off;
-        const turned = [0, 0.03, 0.08].map((d) => ({ ...slid, rotY, x: slid.x + off.x * d, z: slid.z + off.z * d })).find((q) => carFits(q, solids));
+        const turned = [0, 0.03, 0.08].map((d) => ({ ...slid, rotY, x: slid.x + off.x * d, z: slid.z + off.z * d })).find(fits);
         pose = turned ?? slid;
         continue;
       }

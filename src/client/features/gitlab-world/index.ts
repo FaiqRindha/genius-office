@@ -9,7 +9,8 @@ import { aside, hintTitle, key } from '../../core/hint';
 import type { Parts } from '../../core/parts';
 import { store } from '../../state';
 import { clip } from '../../ui/dom';
-import { standsAt } from '../campus/where';
+import { addPlace, standsAt } from '../campus/where';
+import { plotAt } from '../../../shared/gitlab-quarter';
 import { addMapLayer, mapChanged } from '../campus/map';
 import { quarterLayer } from './map';
 import { openBuildingDoor, roleOf } from './ui';
@@ -27,10 +28,28 @@ export function installGitLabWorld(ctx: Ctx, parts: Pick<Parts, 'travel'>) {
     ctx.net.send({ t: 'gitlab.world' });
     ctx.net.send({ t: 'gitlab.access' });
   });
-  store.on('gitlabWorld', () => (quarter.set(store.gitlabWorld), mapChanged()));
+  // Where your building stands may have come with it (when it's one in the Quarter): the campus puts
+  // the world round you again, and the Quarter leaves yours out.
+  store.on('gitlabWorld', () => (quarter.set(store.gitlabWorld), mapChanged(), store.emit('campus')));
   // On the map and the minimap too.
   addMapLayer(quarterLayer(() => store.gitlabWorld));
-  const here = () => quarter.setHere(standsAt(store.campus.here));
+  // A GitLab project's floors stand on their building's plot in the Quarter ("gitlab:<namespace>",
+  // see server/campus.ts): there you go in, and there you come out.
+  const GITLAB = 'gitlab:';
+  const plotOf = (id: string) => {
+    if (!id.startsWith(GITLAB)) return undefined;
+    const key = id.slice(GITLAB.length);
+    for (const d of store.gitlabWorld?.districts ?? []) {
+      const b = d.buildings.find((x) => x.key === key);
+      if (b) return plotAt(d.cells, b.slot);
+    }
+    return undefined;
+  };
+  addPlace(plotOf);
+  const here = () => {
+    const id = store.campus.here;
+    quarter.setHere(standsAt(id), id.startsWith(GITLAB) ? id.slice(GITLAB.length) : undefined);
+  };
   store.on('campus', here);
   ctx.messages.on('floor.enter', here);
   quarter.set(store.gitlabWorld);

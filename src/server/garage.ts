@@ -12,7 +12,11 @@ export class Garage {
   private cars = parked();
   private honked = new Map<string, number>();
 
-  constructor(private now = () => Date.now()) {}
+  constructor(
+    private now = () => Date.now(),
+    /** Where the floor stands in the world (see FloorContext.worldAt): its cars drive the pavement there. */
+    private at: () => { x: number; z: number } = () => ({ x: 0, z: 0 }),
+  ) {}
 
   /** Every car as it is now, for the floor's pages. */
   state(): CarState[] {
@@ -56,7 +60,9 @@ export class Garage {
     const c = this.cars[car];
     if (!c || c.driver !== id) return undefined;
     const { x, z, rotY, speed, steer } = pose;
-    if (![x, z, rotY, speed, steer].every(Number.isFinite) || !paved(x, z)) return undefined;
+    // Its pose is the floor's, from its middle; the pavement's the world's, where the floor stands.
+    const at = this.at();
+    if (![x, z, rotY, speed, steer].every(Number.isFinite) || !paved(x + at.x, z + at.z)) return undefined;
     Object.assign(c, {
       x,
       z,

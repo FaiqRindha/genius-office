@@ -128,9 +128,6 @@ export class Campus {
         ...(bottom ? { bottom } : {}),
       };
     });
-    // A GitLab building's floors are built where the office's are (the Quarter's buildings are drawn
-    // on their own, see gitlab-world), so for the world round you, you're at the office's.
-    if (here.startsWith(GITLAB_BUILDING)) here = MAIN_BUILDING;
     const own = who.accountId && this.accounts.get(who.accountId) ? who.accountId : undefined;
     if (!own) return { buildings, here, floors };
     const guests = this.guestsOf(own);

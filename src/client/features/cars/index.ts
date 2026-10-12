@@ -37,6 +37,7 @@ export function installCars(ctx: Ctx, deps: CarsDeps) {
       ctx.sound.crash({ x: at.x, y: ctx.player.street + 0.5, z: at.z }, speed);
       ctx.shake(Math.min(0.8, speed / 15));
     },
+    at: () => office.grounds.offset(),
   });
   /** car.enter and car.leave of yours the office hasn't answered yet: until it has, you're where you say you are. */
   let carPending = 0;
@@ -180,7 +181,9 @@ export function installCars(ctx: Ctx, deps: CarsDeps) {
   ctx.ticks.add('moved', ({ now }) => {
     // Timing a lap of the scenic loop, behind the wheel.
     if (driver.driving && driver.pose) {
-      const lap = laps.update(driver.pose.x, driver.pose.z, now / 1000);
+      // The loop's the world's: where the car is in it.
+      const w = office.grounds.offset();
+      const lap = laps.update(driver.pose.x + w.x, driver.pose.z + w.z, now / 1000);
       if (lap !== null) lapDone(lap);
     } else laps.reset();
     // A car coming at you where you stand: out of its way, with a thump if it was going.
@@ -269,7 +272,8 @@ export function installCars(ctx: Ctx, deps: CarsDeps) {
     let hint: Hint;
     // Where you are on the scenic loop, and how the lap's going.
     const pose = office.cars.cars[i]?.pose;
-    const place = pose ? loopPlace(pose.x, pose.z) : null;
+    const w = office.grounds.offset();
+    const place = pose ? loopPlace(pose.x + w.x, pose.z + w.z) : null;
     const where = place ? ` · ${PLACES[place].icon} ${PLACES[place].name}` : '';
     if (driver.driving) {
       const kmh = Math.round(Math.abs(driver.pose?.speed ?? 0) * 3.6);
