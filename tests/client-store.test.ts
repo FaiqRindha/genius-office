@@ -101,7 +101,7 @@ const RUN: [ServerMsg, string[]][] = [
   [msg({ t: 'me', me: { admin: false } }), ['me']],
   [msg({ t: 'accounts', state: {} }), ['accounts']],
   [msg({ t: 'signins', state: {} }), ['signins']],
-  [msg({ t: 'campus', state: { buildings: [], here: 'main' } }), ['campus']],
+  [msg({ t: 'campus', state: { buildings: [], here: 'main', floors: {} } }), ['campus']],
   [msg({ t: 'upgrade', state: { available: true, phase: 'idle' } }), ['upgrade']],
   [msg({ t: 'services', state: { items: [], port: 1 } }), ['services']],
   [msg({ t: 'decor', items: [] }), ['decor']],
@@ -251,7 +251,7 @@ test('a new store starts every field where it always has', async () => {
       whiteboard: [], drawing: [], cabinet: { player: null, scores: [] }, cabinetFrame: null, ball: {},
       cars: parked(), carsAt: [], jail: { prisoners: [], bones: 0 },
       team: null, accounts: null, signins: null,
-      campus: { buildings: [], here: 'main' },
+      campus: { buildings: [], here: 'main', floors: {} },
     },
   );
 });

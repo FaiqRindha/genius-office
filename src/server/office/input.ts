@@ -21,8 +21,8 @@ export function arrivalSpot(at: unknown): Spot | undefined {
   if (!at || typeof at !== 'object') return undefined;
   const a = at as Record<string, unknown>;
   const clamp = (v: unknown, lo: number, hi: number) => Math.min(hi, Math.max(lo, num(v)));
-  // Down on the street from a floor high up, the street is a long way down.
-  return { x: clamp(a.x, -60, 60), y: clamp(a.y, streetBelow(MAX_FLOORS - 1), 10), z: clamp(a.z, -60, 60), rotY: num(a.rotY) };
+  // Down on the street from a floor high up, the street is a long way down; out in the campus's district, a long way off.
+  return { x: clamp(a.x, -400, 400), y: clamp(a.y, streetBelow(MAX_FLOORS - 1), 10), z: clamp(a.z, -500, 500), rotY: num(a.rotY) };
 }
 /** The spot someone coming back in says they were standing in (see Net.connect), if they say. */
 export function spotFrom(q: URLSearchParams): ReturnType<typeof arrivalSpot> {

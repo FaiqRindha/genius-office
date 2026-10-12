@@ -42,6 +42,8 @@ export interface NightParts {
   wetGlass: THREE.MeshBasicMaterial;
   /** Light you only see at night (the lighthouse's beam): see-through, `max` opaque when it's dark. */
   glows: { mat: THREE.Material; max: number }[];
+  /** Where the building you're in stands in the world, which the street's halos are drawn that far off from (see Grounds). */
+  shift?: { x: number; z: number };
 }
 
 /** A bulb that glows `day` much by day and fully at night. */

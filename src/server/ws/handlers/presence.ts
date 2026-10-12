@@ -3,6 +3,7 @@
 import type { ChatLine, PresenceClientMsg } from '../../../shared/protocol.js';
 import { seatHereOn } from '../../../shared/maps/index.js';
 import { sanitizeLook } from '../../../shared/avatar.js';
+import { isOutdoors } from '../../../shared/campus.js';
 import { isEmote } from '../../../shared/emotes.js';
 import { ROOF, isDrink } from '../../../shared/rooftop.js';
 import { isBarGame } from '../../../shared/bargames.js';
@@ -13,12 +14,16 @@ import type { HandlerMap } from './types.js';
 export const presenceHandlers = {
   move(ctx, c, msg) {
     const p = c.peer;
+    // Out on the grounds, everyone on the campus sees you (see isOutdoors): coming in too, so they see you go.
+    const out = isOutdoors(p.x, p.y, p.z);
     p.x = num(msg.x);
     p.y = num(msg.y);
     p.z = num(msg.z);
     p.rotY = num(msg.rotY);
     p.moving = !!msg.moving;
-    ctx.toNeighbors(c, { t: 'peer.move', id: c.id, x: p.x, y: p.y, z: p.z, rotY: p.rotY, moving: p.moving }, true);
+    const moved = { t: 'peer.move', id: c.id, x: p.x, y: p.y, z: p.z, rotY: p.rotY, moving: p.moving } as const;
+    if (out || isOutdoors(p.x, p.y, p.z)) ctx.broadcast(moved, c.id, true);
+    else ctx.toNeighbors(c, moved, true);
   },
   act(ctx, c, msg) {
     if (msg.drink !== undefined) {

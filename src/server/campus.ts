@@ -71,32 +71,41 @@ export class Campus {
     return this.last.get(id) ?? (who.accountId && this.accounts.get(who.accountId) ? who.accountId : MAIN_BUILDING);
   }
 
-  /**
-   * Every building, in the order they stand: the office's own first (while it has floors, or there
-   * are no accounts), then each account's, oldest first.
-   */
-  ids(defs: readonly { owner?: string }[]): string[] {
-    const main = !this.accounts.any || defs.some((d) => this.of(d) === MAIN_BUILDING);
-    return [...(main ? [MAIN_BUILDING] : []), ...this.accounts.list().map((a) => a.id)];
+  /** Every building, in the order they stand (see buildingAt): the office's own on the main street, then each account's, oldest first. */
+  ids(): string[] {
+    return [MAIN_BUILDING, ...this.accounts.list().map((a) => a.id)];
   }
 
-  /** What `who`, in `here`, sees of the campus. */
-  state(who: Who, here: string, defs: readonly { owner?: string }[]): CampusState {
-    const buildings: BuildingInfo[] = this.ids(defs).map((id) => ({
-      id,
-      name: id === MAIN_BUILDING ? this.officeName : (this.accounts.get(id)?.name ?? '?'),
-      floors: defs.filter((d) => this.of(d) === id).length,
-      access: this.mayEnter(who, id),
-      mine: id === who.accountId,
-    }));
+  /** What `who`, in `here`, sees of the campus: `defs` are every floor (on its way too), `open` the ones open, bottom one first. */
+  state(who: Who, here: string, defs: readonly { owner?: string }[], open: readonly { id: string; owner?: string }[] = []): CampusState {
+    const floors: CampusState['floors'] = {};
+    const up = new Map<string, number>();
+    for (const f of open) {
+      const b = this.of(f);
+      const i = up.get(b) ?? 0;
+      floors[f.id] = [b, i];
+      up.set(b, i + 1);
+    }
+    const buildings: BuildingInfo[] = this.ids().map((id) => {
+      const access = this.mayEnter(who, id);
+      const bottom = access ? open.find((f) => this.of(f) === id)?.id : undefined;
+      return {
+        id,
+        name: id === MAIN_BUILDING ? this.officeName : (this.accounts.get(id)?.name ?? '?'),
+        floors: defs.filter((d) => this.of(d) === id).length,
+        access,
+        mine: id === who.accountId,
+        ...(bottom ? { bottom } : {}),
+      };
+    });
     const own = who.accountId && this.accounts.get(who.accountId) ? who.accountId : undefined;
-    if (!own) return { buildings, here };
+    if (!own) return { buildings, here, floors };
     const guests = this.guestsOf(own);
     const people: CampusPerson[] = this.accounts
       .list()
       .filter((a) => a.id !== own && !guests.some((g) => g.id === a.id))
       .map((a) => ({ id: a.id, name: a.name }));
-    return { buildings, here, guests, people };
+    return { buildings, here, floors, guests, people };
   }
 
   /** Who's on `owner`'s guest list, as long as their accounts are still there. */

@@ -2,9 +2,10 @@ import type { Ctx } from '../../core/context';
 import { store } from '../../state';
 import { $, h, modalOpen } from '../../ui/dom';
 import { campusMap, type CampusMap, type MapDot } from './map';
+import { outdoorAt, standsAt } from './where';
 
 // The minimap, as a game has one: a round window on the map in the bottom-right corner, north up,
-// that follows you about, with you as the arrow and the others out on your floor's grounds as dots.
+// that follows you about, with you as the arrow and everyone else you could see as dots.
 // Click it (or J) for the whole map.
 
 /** How many meters of the map the minimap shows either side of you. */
@@ -12,14 +13,21 @@ const SPAN = 75;
 /** How often it's moved, at most (it needn't keep up with every frame). */
 const EVERY_MS = 80;
 
-/** Where you are and which way you face, and everyone else on your floor. */
+/** Where you are in the world and which way you face, and everyone else on your floor or out on the grounds. */
 export function dotsOf(ctx: Ctx): { you: MapDot | null; others: MapDot[] } {
   const { player } = ctx;
   if (!ctx.inOffice() || ctx.upTop()) return { you: null, others: [] };
+  // The floor you're on is built round the middle of your building: the map is the world's.
+  const at = standsAt(store.campus.here);
   // First person, you face where the camera looks (see place.ts: camYaw = facing - π).
   const facing = player.view === 'first' ? player.camYaw + Math.PI : player.facing;
-  const others = [...store.peers.values()].filter((p) => p.id !== store.you && store.onMyFloor(p)).map((p) => ({ x: p.x, z: p.z, name: p.name }));
-  return { you: { x: player.pos.x, z: player.pos.z, facing }, others };
+  const others: MapDot[] = [];
+  for (const p of store.peers.values()) {
+    if (p.id === store.you || p.lite) continue;
+    const there = store.onMyFloor(p) ? p : outdoorAt(p);
+    if (there) others.push({ x: there.x + at.x, z: there.z + at.z, name: p.name });
+  }
+  return { you: { x: player.pos.x + at.x, z: player.pos.z + at.z, facing }, others };
 }
 
 export function mountMinimap(ctx: Ctx, open: () => void) {

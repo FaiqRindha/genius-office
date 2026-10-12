@@ -6,7 +6,7 @@
 import type * as THREE from 'three';
 import type { MapPlan } from '../../shared/maps';
 import type { CarriedIssue, GhIssue, ServerMsg } from '../../shared/protocol';
-import type { Grip } from '../features/climbing/controller';
+import type { Arrival, Grip } from '../features/climbing/controller';
 import type { DeskKey } from '../interaction';
 import type { Net } from '../net';
 import type { PlayerController } from '../player';
@@ -57,6 +57,8 @@ export interface Trip {
   how: TripKind;
   timer: number;
   garage?: boolean;
+  /** Where you'll be standing when you get there (in through another building's door: see features/campus). */
+  at?: Arrival;
 }
 
 /** The types the office's things-you-can-use are about (see Interactions). */

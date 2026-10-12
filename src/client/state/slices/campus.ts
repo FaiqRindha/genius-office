@@ -13,7 +13,7 @@ declare module '../store' {
 
 export const campus: Slice = {
   init(s) {
-    s.campus = { buildings: [], here: MAIN_BUILDING };
+    s.campus = { buildings: [], here: MAIN_BUILDING, floors: {} };
   },
   on: {
     campus(s, m) {

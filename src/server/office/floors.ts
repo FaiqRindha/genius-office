@@ -35,7 +35,8 @@ export function floorHelpers(ctx: Ctx): FloorHelpers {
     const here = hereOf(c);
     const floors = lists.get(here) ?? floorInfos(here);
     lists.set(here, floors);
-    const campus = ctx.campus.state(c, here, [...ctx.building.list(), ...ctx.building.pending()].filter((d) => d.id !== closing));
+    const defs = [...ctx.building.list(), ...ctx.building.pending()].filter((d) => d.id !== closing);
+    const campus = ctx.campus.state(c, here, defs, [...ctx.floors.values()].map((f) => f.def).filter((d) => d.id !== closing));
     const was = sent.get(c);
     const now = { floors: JSON.stringify(floors), campus: JSON.stringify(campus) };
     sent.set(c, now);

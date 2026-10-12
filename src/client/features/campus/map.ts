@@ -1,13 +1,13 @@
 import './map.css';
-import { AVENUE, BOULEVARD, DISTRICT, FOOTPRINT, HOME_READER, READER, districtEnd, slotAt } from '../../../shared/campus';
+import { AVENUE, BOULEVARD, DISTRICT, FOOTPRINT, READER, buildingAt, districtEnd, slotAt } from '../../../shared/campus';
 import { EXIT_STAIRS, ROAD } from '../../../shared/layout';
 import type { CampusState } from '../../../shared/protocol';
 import { h, openModal } from '../../ui/dom';
 
-// The 🗺️ map: the city from above, north up, as a game's map is. The building you're in is the one on
-// the main street; every other one stands in its slot in the district north of it, with its owner's
-// name and whether your card opens it. You're the red arrow, and the others out on your floor's
-// grounds are dots. The minimap in the corner follows you about; the whole map opens from it (or J).
+// The 🗺️ map: the city from above, north up, as a game's map is. The office's own building is on the
+// main street; everyone's stands in its slot in the district north of it, with its owner's name and
+// whether your card opens it. You're the red arrow, and everyone else you could see is a dot. The
+// minimap in the corner follows you about; the whole map opens from it (or J).
 
 const SVG = 'http://www.w3.org/2000/svg';
 
@@ -48,36 +48,23 @@ export function campusMap(state: CampusState): CampusMap {
   // The main street, the brick path and boulevard up to the district, and the avenues in front of its rows.
   rect(west, ROAD.minZ, east - west, ROAD.maxZ - ROAD.minZ, 'cm-road');
   label(west + 30, ROAD.maxZ - 2.2, 'Main street', 'cm-road-label');
-  const rows = Math.ceil(n / DISTRICT.cols);
+  const rows = Math.ceil((n - 1) / DISTRICT.cols);
   if (n > 1) {
     for (let r = 0; r < rows; r++) rect(west, slotAt(r * DISTRICT.cols).z + AVENUE.ahead - AVENUE.width / 2, east - west, AVENUE.width, 'cm-road');
     const top = slotAt(0).z + AVENUE.ahead;
     rect(BOULEVARD.x - BOULEVARD.width / 2, top, BOULEVARD.width, BOULEVARD.fromZ - top, 'cm-brick');
-    rect(BOULEVARD.x, HOME_READER.z, EXIT_STAIRS.minX - BOULEVARD.x, 2, 'cm-brick');
+    rect(BOULEVARD.x, READER.z, EXIT_STAIRS.minX - BOULEVARD.x, 2, 'cm-brick');
   }
 
   const w = FOOTPRINT.maxX - FOOTPRINT.minX;
   const d = FOOTPRINT.maxZ - FOOTPRINT.minZ;
-  const nameOf = (b: CampusState['buildings'][number]) => (b.mine ? `${b.name} (yours)` : b.name);
-  const reader = (x: number, z: number) => svg.append(el('circle', { cx: x, cy: z, r: 1.4, class: 'cm-reader' }));
-  const here = state.buildings.find((b) => b.id === state.here);
-  // The one you're in, on the main street.
-  rect(FOOTPRINT.minX, FOOTPRINT.minZ, w, d, 'cm-here');
-  label(0, -2, `🏢 ${here ? nameOf(here) : 'The office'}`, 'cm-label cm-big');
-  label(0, 5, 'you’re in this one', 'cm-sub');
-  reader(HOME_READER.x, HOME_READER.z);
   state.buildings.forEach((b, i) => {
-    const at = slotAt(i);
-    if (b.id === state.here) {
-      // Its slot in the district is a plaza.
-      if (n > 1) rect(at.x + FOOTPRINT.minX, at.z + FOOTPRINT.minZ, w, d, 'cm-plaza');
-      if (n > 1) label(at.x, at.z + 2, '📍 on the main street', 'cm-sub');
-      return;
-    }
-    rect(at.x + FOOTPRINT.minX, at.z + FOOTPRINT.minZ, w, d, b.mine ? 'cm-mine' : b.access ? 'cm-open' : 'cm-locked');
-    label(at.x, at.z - 1, `${b.access ? '🏢' : '🔒'} ${nameOf(b)}`, 'cm-label');
-    label(at.x, at.z + 6, b.floors ? `${b.floors} floor${b.floors === 1 ? '' : 's'}` : 'no floors yet', 'cm-sub');
-    reader(at.x + READER.x, at.z + READER.z);
+    const at = buildingAt(i);
+    const here = b.id === state.here;
+    rect(at.x + FOOTPRINT.minX, at.z + FOOTPRINT.minZ, w, d, here ? 'cm-here' : b.mine ? 'cm-mine' : b.access ? 'cm-open' : 'cm-locked');
+    label(at.x, at.z - 1, `${b.access ? '🏢' : '🔒'} ${b.mine ? `${b.name} (yours)` : b.name}`, here ? 'cm-label cm-big' : 'cm-label');
+    label(at.x, at.z + 6, here ? 'you’re in this one' : b.floors ? `${b.floors} floor${b.floors === 1 ? '' : 's'}` : 'no floors yet', 'cm-sub');
+    svg.append(el('circle', { cx: at.x + READER.x, cy: at.z + READER.z, r: 1.4, class: 'cm-reader' }));
   });
 
   // Everyone else out on your floor's grounds, then you on top.
@@ -123,7 +110,7 @@ export function openCampusMap(state: () => CampusState, dots: () => { you: MapDo
     h(
       'footer',
       {},
-      h('span.grow', {}, here ? `You’re in ${here.mine ? 'your building' : `${here.name}’s building`}, on the main street. Every other building stands in the district: up the brick path from the foot of the exit steps. ● is a card reader.` : 'The district’s buildings, from above.'),
+      h('span.grow', {}, here ? `You’re in ${here.mine ? 'your building' : `${here.name}’s building`}. The office’s own is on the main street, and everyone’s stands in the district north of it: up the brick path from the foot of its exit steps. ● is a card reader, at the foot of each building’s steps: tap your card there and its door opens.` : 'The campus, from above.'),
     ),
   );
   body.append(map.svg);

@@ -217,32 +217,17 @@ export function installTravel(ctx: Ctx, core: CoreState, parts: TravelParts) {
   }
 
   /**
-   * In through a door with your ID card (see features/campus): a blink, and you're standing `at` on
-   * floor `floorId`, which may be in another building.
+   * In through another building's door (see features/campus): no lights going down, you just walk
+   * in, and once its floor's here you're standing `at` on it, which is where you were in the world.
    */
-  function enterAt(floorId: string, at: Arrival) {
+  function walkInto(floorId: string, at: Arrival) {
     if (core.trip) return;
-    closeAllModals();
     stopForTrip();
-    if (player.seat) parts.seating.standUp();
     parts.walking.stopWalkingTo();
     player.enabled = false;
     player.clearKeys();
-    fade(true, true);
-    if (floorId === store.floor) {
-      // This floor's own door: in, and the lights come up.
-      setTimeout(() => {
-        parts.place.placeAt(at);
-        fade(false);
-        player.enabled = !modalOpen();
-      }, 170);
-      return;
-    }
-    core.trip = { floor: floorId, how: 'switch', timer: window.setTimeout(tripFailed, 10_000) };
-    setTimeout(() => {
-      parts.place.placeAt(at);
-      net.send({ t: 'floor.go', floor: floorId, at });
-    }, 170);
+    core.trip = { floor: floorId, how: 'switch', timer: window.setTimeout(tripFailed, 10_000), at };
+    net.send({ t: 'floor.go', floor: floorId, at });
   }
 
   /** Through the ceiling up the ladder, or through the floor down one: the lights dip as you pass. */
@@ -336,6 +321,8 @@ export function installTravel(ctx: Ctx, core: CoreState, parts: TravelParts) {
     if (core.trip) {
       // Down to the garage: into the car at the bottom of the shaft, now that the street is where this floor has it.
       if (core.trip.garage && store.floor) placeInCar(player.pos, true);
+      // In through another building's door: where you were in the world, on its floor's map.
+      if (core.trip.at) parts.place.placeAt(core.trip.at);
       clearTimeout(core.trip.timer);
       core.trip = null;
     }
@@ -368,5 +355,5 @@ export function installTravel(ctx: Ctx, core: CoreState, parts: TravelParts) {
     doorsOpen();
   }
 
-  return { syncStack, takenAway, showElevator, lift, ride, switchFloor, travel, enterAt, leaveRoofFor, setPlace, arrive, pending };
+  return { syncStack, takenAway, showElevator, lift, ride, switchFloor, travel, walkInto, leaveRoofFor, setPlace, arrive, pending };
 }

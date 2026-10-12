@@ -562,7 +562,7 @@ export class Sky {
     this.street = this.night.street;
     const drop = STREET_Y - this.street;
     uniforms.skyDrop.value = drop;
-    this.groundHalos.position.y = -drop;
+    this.groundHalos.position.set(-(this.night.shift?.x ?? 0), -drop, -(this.night.shift?.z ?? 0));
     const lo = uniforms.skyLampMin.value.set(Infinity, Infinity, Infinity);
     const hi = uniforms.skyLampMax.value.set(-Infinity, -Infinity, -Infinity);
     this.night.lamps.slice(0, MAX_LAMPS).forEach((l, i) => {

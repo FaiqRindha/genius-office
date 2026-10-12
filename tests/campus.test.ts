@@ -5,7 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { Accounts } from '../src/server/accounts.js';
 import { Campus } from '../src/server/campus.js';
-import { DISTRICT, FOOTPRINT, READER, slotAt } from '../src/shared/campus.js';
+import { DISTRICT, DOOR, FOOTPRINT, READER, buildingAt, isOutdoors, slotAt } from '../src/shared/campus.js';
+import { EXIT_STAIRS, FLOOR, STREET_Y } from '../src/shared/layout.js';
 import { MAIN_BUILDING } from '../src/shared/protocol.js';
 
 /** An office's data folder with these accounts in it (no passwords that work: these tests never sign in). */
@@ -54,23 +55,33 @@ test('the guest lists are kept across a restart', () => {
   assert.deepEqual(again.guestsOf('ada000'), [{ id: 'bob000', name: 'Bob' }]);
 });
 
-test('what you see of the campus: every building in its slot, which open to you, and your guest list', () => {
+test('what you see of the campus: every building where it stands, which open to you, their bottom floors, and your guest list', () => {
   const { campus } = office(['ada000', 'Ada'], ['bob000', 'Bob']);
   const defs = [{ owner: 'ada000' }, { owner: 'ada000' }, {}];
-  const s = campus.state(bob, 'bob000', defs);
+  const open = [
+    { id: 'ada-api', owner: 'ada000' },
+    { id: 'lobby', owner: undefined },
+    { id: 'ada-web', owner: 'ada000' },
+  ];
+  const s = campus.state(bob, 'bob000', defs, open);
   assert.deepEqual(
-    s.buildings.map((b) => [b.id, b.name, b.floors, b.access, b.mine]),
+    s.buildings.map((b) => [b.id, b.name, b.floors, b.access, b.mine, b.bottom]),
     [
-      [MAIN_BUILDING, 'the office', 1, true, false],
-      ['ada000', 'Ada', 2, false, false],
-      ['bob000', 'Bob', 0, true, true],
+      [MAIN_BUILDING, 'the office', 1, true, false, 'lobby'],
+      ['ada000', 'Ada', 2, false, false, undefined],
+      ['bob000', 'Bob', 0, true, true, undefined],
     ],
   );
+  // Which building each open floor is in, and how far up it.
+  assert.deepEqual(s.floors, { 'ada-api': ['ada000', 0], lobby: [MAIN_BUILDING, 0], 'ada-web': ['ada000', 1] });
   assert.equal(s.here, 'bob000');
   assert.deepEqual(s.guests, []);
   assert.deepEqual(s.people, [{ id: 'ada000', name: 'Ada' }]);
-  // With no floors of its own, the office's building isn't put up once there are accounts.
-  assert.deepEqual(campus.ids([{ owner: 'ada000' }]), ['ada000', 'bob000']);
+  // The office's own building is always first, on the main street.
+  assert.deepEqual(campus.ids(), [MAIN_BUILDING, 'ada000', 'bob000']);
+  // A guest sees the bottom floor its door opens onto.
+  campus.invite('ada000', 'bob000');
+  assert.equal(campus.state(bob, 'bob000', defs, open).buildings[1].bottom, 'ada-api');
   // The shared password has no building, so no guest list.
   assert.equal(campus.state({ admin: true }, MAIN_BUILDING, defs).guests, undefined);
 });
@@ -85,17 +96,30 @@ test('where you are on the campus: your floor’s building, else the last one yo
   assert.equal(campus.here('c2', { admin: true }, undefined), MAIN_BUILDING);
 });
 
-test('the district’s slots are five to a row, clear of each other, and its readers stand outside the buildings', () => {
-  const at = Array.from({ length: 20 }, (_, i) => slotAt(i));
-  assert.deepEqual(at[0], { x: -2 * DISTRICT.pitchX, z: DISTRICT.firstZ });
-  assert.deepEqual(at[5], { x: -2 * DISTRICT.pitchX, z: DISTRICT.firstZ - DISTRICT.pitchZ });
-  const width = FOOTPRINT.maxX - FOOTPRINT.minX;
+test('every building stands where the campus has it: the office’s on the main street, the rest five to a row, clear of each other', () => {
+  assert.deepEqual(buildingAt(0), { x: 0, z: 0 });
+  assert.deepEqual(buildingAt(1), slotAt(0));
+  assert.deepEqual(slotAt(0), { x: -2 * DISTRICT.pitchX, z: DISTRICT.firstZ });
+  assert.deepEqual(slotAt(5), { x: -2 * DISTRICT.pitchX, z: DISTRICT.firstZ - DISTRICT.pitchZ });
+  const at = Array.from({ length: 21 }, (_, i) => buildingAt(i));
+  // Room for each one's steps and reader on its west side, too.
+  const width = FOOTPRINT.maxX - FOOTPRINT.minX + 4;
   const depth = FOOTPRINT.maxZ - FOOTPRINT.minZ;
   for (let i = 0; i < at.length; i++) {
-    for (let j = i + 1; j < at.length; j++) assert.ok(Math.abs(at[i].x - at[j].x) > width + 10 || Math.abs(at[i].z - at[j].z) > depth + 10, `slots ${i} and ${j} overlap`);
+    for (let j = i + 1; j < at.length; j++) assert.ok(Math.abs(at[i].x - at[j].x) > width + 10 || Math.abs(at[i].z - at[j].z) > depth + 10, `buildings ${i} and ${j} overlap`);
   }
-  // In front of the doors, off the building's footprint.
-  assert.ok(READER.z > FOOTPRINT.maxZ && READER.x > FOOTPRINT.minX && READER.x < FOOTPRINT.maxX);
-  // The whole district is north of the office's neighbours (at z -50 and up).
-  assert.ok(at.every((s) => s.z + FOOTPRINT.maxZ < -60));
+  // The district is north of the office's neighbours (at z -50 and up); its readers are out on the street, by the steps.
+  assert.ok(at.slice(1).every((s) => s.z + FOOTPRINT.maxZ < -60));
+  assert.ok(READER.x < FOOTPRINT.minX && READER.z > EXIT_STAIRS.landingZ1);
+  // Its door is in its west wall, on the landing at the top of the steps.
+  assert.ok(DOOR.x < FLOOR.minX && DOOR.x > FOOTPRINT.minX - 0.01);
+});
+
+test('out on the grounds is the street, the steps and the district; in the room (or the back office) is indoors', () => {
+  assert.equal(isOutdoors(0, 0, 0), false);
+  assert.equal(isOutdoors(15, 0, -20), false, 'the back office');
+  assert.equal(isOutdoors(0, STREET_Y, 0), true, 'the garage under it');
+  assert.equal(isOutdoors(-19, 0, 6.5), true, 'the landing outside the exit door');
+  assert.equal(isOutdoors(0, STREET_Y, 27), true, 'the street');
+  assert.equal(isOutdoors(0, 0, 16), true, 'the balcony');
 });
