@@ -25,7 +25,10 @@ export function gitlabCard(net: Net): { el: HTMLElement; dispose(): void } {
 
   const render = () => {
     const s = store.gitlab;
-    if (!store.me.account || !s) {
+    // One of GitHub and GitLab at a time: signed in to your own GitHub, there's no GitLab to offer.
+    const gh = store.signins?.github;
+    const onGitHub = gh?.status === 'ok' && gh.how !== 'office' && s?.status !== 'ok';
+    if (!store.me.account || !s || onGitHub) {
       el.hidden = true;
       return;
     }
@@ -46,7 +49,7 @@ export function gitlabCard(net: Net): { el: HTMLElement; dispose(): void } {
       body.append(h('div.signin-actions', {}, out));
     } else if (s.status === 'none') {
       body.append(
-        h('p.note', {}, 'Your own GitLab: its address, and a personal access token with the ', h('code', {}, 'api'), ' and ', h('code', {}, 'write_repository'), ' scopes (in GitLab, ', h('b', {}, 'Preferences → Access tokens'), '). Your workers push and open merge requests with it, through ', h('code', {}, 'git'), ' and ', h('code', {}, 'glab'), '.'),
+        h('p.note', {}, 'Your own GitLab: its address, and a personal access token with the ', h('code', {}, 'api'), ' and ', h('code', {}, 'write_repository'), ' scopes (in GitLab, ', h('b', {}, 'Preferences → Access tokens'), '). Your workers push and open merge requests with it, through ', h('code', {}, 'git'), ' and ', h('code', {}, 'glab'), ', and the elevator adds projects from it. It takes GitHub’s place: you use one of the two.'),
         form,
       );
     }
@@ -55,7 +58,7 @@ export function gitlabCard(net: Net): { el: HTMLElement; dispose(): void } {
     for (const i of [url, token]) if (typing === i && i.isConnected) i.focus();
   };
 
-  const unsub = [store.on('gitlab', render), store.on('me', render)];
+  const unsub = [store.on('gitlab', render), store.on('me', render), store.on('signins', render)];
   render();
   if (store.me.account) net.send({ t: 'gitlab.get' });
   return { el, dispose: () => unsub.forEach((off) => off()) };

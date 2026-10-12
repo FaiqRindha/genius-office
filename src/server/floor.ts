@@ -395,6 +395,7 @@ export class Floor {
       id: this.id,
       name: this.def.name,
       repo: this.def.repo,
+      gitlab: this.def.gitlab,
       dir: this.dir,
       branch: this.project.branch,
       palette: this.def.palette,

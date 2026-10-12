@@ -30,7 +30,7 @@ export function openSignIns(net: Net, why?: string) {
     h(
       'div.body.team',
       {},
-      h('p.note.lead', {}, 'Your workers run on your own Claude plan, and the office acts on GitHub as you: comments, merges and pull requests show up under your name. Only your workers use them.'),
+      h('p.note.lead', {}, 'Your workers run on your own Claude plan, and the office acts on GitHub, or your GitLab, as you: comments, merges and pull requests show up under your name. Only your workers use them.'),
       banner,
       cards,
       h('div.signins', {}, gitlab.el),
@@ -147,16 +147,18 @@ export function openSignIns(net: Net, why?: string) {
       cards.append(h('p.empty', {}, store.me.account ? 'Loading…' : 'On the shared office password, workers run on the office’s own sign-ins.'));
       return;
     }
-    cards.append(card('claude', s.claude, s.office), card('github', s.github, s.office));
+    // One of GitHub and GitLab at a time: signed in to GitLab, there's no GitHub to offer.
+    const onGitLab = store.gitlab?.status === 'ok';
+    cards.append(card('claude', s.claude, s.office), ...(onGitLab ? [] : [card('github', s.github, s.office)]));
     if (typing instanceof HTMLInputElement && Object.values(inputs).includes(typing) && typing.isConnected) typing.focus();
     // Once both are sorted, whatever sent you here is too.
-    if (s.claude.status === 'ok' && s.github.status === 'ok') say();
+    if (s.claude.status === 'ok' && (s.github.status === 'ok' || onGitLab)) say();
   };
 
-  const unsub = store.on('signins', render);
+  const unsubs = [store.on('signins', render), store.on('gitlab', render)];
   const modal = openModal(el, {
     onClose: () => {
-      unsub();
+      for (const off of unsubs) off();
       gitlab.dispose();
       open = null;
     },
