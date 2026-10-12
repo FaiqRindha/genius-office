@@ -6,6 +6,7 @@ import { providerCommand } from '../agents.js';
 import type { AgentProvider } from '../../shared/providers.js';
 import { createModelCatalogues } from '../models.js';
 import { Building } from '../building.js';
+import { Campus } from '../campus.js';
 import type { Floor } from '../floor.js';
 import { ChatLog } from '../history.js';
 import { Arcade, HighScores } from '../cabinet.js';
@@ -44,5 +45,7 @@ export function createCore(ctx: Ctx, cfg: Config, publicDir: string): Core {
     if (err) console.error(`agent-office: --projects: ${err}`);
   }
   const floors = new Map<string, Floor>();
-  return { cfg, publicDir, accounts, auth, clients, chat, highScores, arcade, officeName, models, building, floors };
+  // A building per account, round the city, and who's on whose guest list.
+  const campus = new Campus(cfg.dataDir, accounts, officeName);
+  return { cfg, publicDir, accounts, auth, clients, chat, highScores, arcade, officeName, models, building, floors, campus };
 }

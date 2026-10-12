@@ -17,6 +17,8 @@ export interface FloorDef {
   palette: number;
   addedBy: string;
   addedAt: number;
+  /** The account whose building it's in (see campus.ts); none for the office's own building. */
+  owner?: string;
 }
 
 /** A projects folder picked in ⚙️ Settings (or with --projects), as projects-folder.json keeps it. */
@@ -47,7 +49,6 @@ interface Pending {
 interface SavedClone extends FloorDef {
   pid: number;
   log: string;
-  owner?: string;
   empty?: boolean;
 }
 
@@ -187,7 +188,7 @@ export class Building {
         dropLog(s.log);
         continue;
       }
-      const def = this.newDef(s.name, repo, s.dir, s.addedBy);
+      const def = this.newDef(s.name, repo, s.dir, s.addedBy, s.owner);
       const pending: Pending = { def, owner: s.owner, empty: !!s.empty };
       const run = CloneRun.adopt(s.pid, s.log, { ...this.opts.clone, changed: () => this.cloneChanged?.() });
       if (!run) {
@@ -285,7 +286,8 @@ export class Building {
     if (!wanted) return 'Pick a repository, or type it as owner/name';
     if (this.defs.some((d) => sameRepo(d.repo, wanted))) return `${wanted} already has a floor`;
     if (this.cloning.has(wanted.toLowerCase())) return `${wanted} is already being cloned`;
-    if (this.defs.length + this.cloning.size >= MAX_FLOORS) return `The building is full (${MAX_FLOORS} floors)`;
+    // Each account's building is as tall as MAX_FLOORS; floors nobody owns are the office's own building.
+    if ([...this.defs, ...this.pending()].filter((d) => d.owner === account).length >= MAX_FLOORS) return `The building is full (${MAX_FLOORS} floors)`;
     // The office's own checkout, taken off before: it moves back in where it is, not into a second clone.
     const home = this.local;
     if (this.localOff && home && sameRepo(home.repo, wanted) && existsSync(home.dir)) {
@@ -313,7 +315,7 @@ export class Building {
     const [owner, name] = repo.split('/');
     const dest = path.join(this.projectsDir, owner, name);
     if (this.defs.some((d) => path.resolve(d.dir) === dest)) return `${dest} is already a floor`;
-    const def = this.newDef(name, repo, dest, by);
+    const def = this.newDef(name, repo, dest, by, account);
     const pending: Pending = { def, owner: account, empty };
     this.cloning.set(key, pending);
     started(def);
@@ -381,7 +383,7 @@ export class Building {
     return repos;
   }
 
-  private newDef(name: string, repo: string | undefined, dir: string, by: string): FloorDef {
+  private newDef(name: string, repo: string | undefined, dir: string, by: string, owner?: string): FloorDef {
     const taken = new Set([...this.defs, ...this.pending()].map((d) => d.id));
     const base = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 32) || 'floor';
     let id = base;
@@ -390,7 +392,7 @@ export class Building {
     const used = new Set([...this.defs, ...this.pending()].map((d) => d.palette));
     const free = FLOOR_PALETTES.findIndex((_, i) => !used.has(i));
     const palette = free >= 0 ? free : (this.defs.length + this.cloning.size) % FLOOR_PALETTES.length;
-    return { id, name, repo, dir, palette, addedBy: by, addedAt: Date.now() };
+    return { id, name, repo, dir, palette, addedBy: by, addedAt: Date.now(), ...(owner ? { owner } : {}) };
   }
 
   private load() {
@@ -409,6 +411,7 @@ export class Building {
           palette: Number.isInteger(s.palette) && (s.palette as number) >= 0 ? (s.palette as number) : 0,
           addedBy: typeof s.addedBy === 'string' ? s.addedBy : '?',
           addedAt: typeof s.addedAt === 'number' ? s.addedAt : Date.now(),
+          ...(typeof s.owner === 'string' && s.owner ? { owner: s.owner } : {}),
         });
       }
     } catch (err) {

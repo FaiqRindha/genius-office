@@ -151,7 +151,7 @@ export function openElevator(opts: ElevatorOptions): void {
     return btn;
   };
 
-  /** The floor's button, with a 🗑 beside it for admins to take it off the building (⏹ to stop it while it's cloned). */
+  /** The floor's button, with a 🗑 beside it for admins and the building's owner to take it off (⏹ to stop it while it's cloned). */
   const floorRow = (f: FloorInfo, i: number) => {
     const btn = floorButton(f, i);
     if (f.cloning) {
@@ -160,7 +160,9 @@ export function openElevator(opts: ElevatorOptions): void {
       stop.addEventListener('click', () => confirmDialog(`Stop cloning ${f.repo ?? f.name}?`, "What's come down so far is thrown away. You can add it again any time.", '⏹️ Stop cloning', () => net.send({ t: 'floor.cancel', floor: f.id })));
       return h('div.floor-row', {}, btn, stop);
     }
-    if (!store.me.admin) return btn;
+    // Your own building's floors are yours to take off too (see features/campus).
+    const own = store.campus.buildings.some((b) => b.id === store.campus.here && b.mine);
+    if (!store.me.admin && !own) return btn;
     const off = h('button.btn.floor-off', { type: 'button', title: `Take ${f.name} off the building`, 'aria-label': `Remove ${f.name}` }, '🗑');
     off.addEventListener('click', () => confirmRemove(f));
     return h('div.floor-row', {}, btn, off);

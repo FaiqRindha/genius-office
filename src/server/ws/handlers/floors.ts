@@ -16,6 +16,8 @@ export const floorHandlers = {
     }
     const floor = ctx.floors.get(str(msg.floor, 64));
     if (!floor) ctx.warn(c, ctx.building.pending().some((d) => d.id === msg.floor) ? "That floor is still being cloned — it'll be ready in a moment" : 'No such floor');
+    // Into someone else's building only on their guest list (see campus.ts).
+    else if (!ctx.campus.mayEnter(c, ctx.campus.of(floor.def))) ctx.warn(c, "That floor's in someone else's building, and your card doesn't open it");
     else ctx.goToFloor(c, floor, arrivalSpot(msg.at));
   },
   'floor.repos'(ctx, c, msg) {
@@ -58,9 +60,10 @@ export const floorHandlers = {
   },
   'floor.remove'(ctx, c, msg) {
     const who = c.peer.name;
-    // Everyone's workers on it stop: admins do it.
-    if (!ctx.meOf(c.accountId).admin) return ctx.warn(c, 'Only admins can take a floor off the building');
     const id = str(msg.floor, 64);
+    // Everyone's workers on it stop: admins do it, or the owner of the building it's in.
+    const def = ctx.building.list().find((d) => d.id === id);
+    if (!ctx.meOf(c.accountId).admin && !(def && c.accountId && ctx.campus.of(def) === c.accountId)) return ctx.warn(c, 'Only admins, and the owner of its building, can take a floor off it');
     const r = ctx.building.remove(id, who);
     if (typeof r === 'string') return ctx.warn(c, r);
     console.log(`  ${who} took the ${r.name} floor off the building (${r.dir} stays where it is)`);

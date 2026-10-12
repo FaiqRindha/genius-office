@@ -17,6 +17,7 @@ import type { PlanLimitsReader } from '../limits.js';
 import type { Webhook } from '../webhook.js';
 import type { Machine } from '../machine.js';
 import type { Building, FloorDef } from '../building.js';
+import type { Campus, Who } from '../campus.js';
 import type { Floor } from '../floor.js';
 import type { Sky } from '../sky.js';
 import type { Themes } from '../theme.js';
@@ -52,6 +53,7 @@ export interface Core {
   /** The building: a floor per project, each with its own workers, boards and queue. */
   building: Building;
   floors: Map<string, Floor>;
+  campus: Campus;
 }
 
 /** Made once the hook server listens, before any floor opens (office/services.ts). */
@@ -111,13 +113,23 @@ export interface FloorHelpers {
   floorOf(c: Client): Floor | undefined;
   /** The floor a worker sits on. Worker ids are unique across the building. */
   workerFloor(workerId: string): Floor | undefined;
-  floorInfos(): FloorInfo[];
+  /** The elevator's list: of one building's floors (see campus.ts), or of all of them. */
+  floorInfos(building?: string): FloorInfo[];
   /** The elevator's counts change with every worker update; tell everyone at most a few times a second. */
   floorsChanged(): void;
   /** Drops a `floorsChanged` still waiting to go out (the office is closing). */
   cancelFloorsChanged(): void;
-  /** Where someone arriving goes: the floor they asked for, else the first one there is. */
-  arrivalFloor(wanted: string | null): Floor | undefined;
+  /**
+   * Where someone arriving goes: the floor they asked for, if their card opens its building, else the
+   * first floor of their own building, the office's, or any they may go into.
+   */
+  arrivalFloor(wanted: string | null, who: Who, except?: Floor): Floor | undefined;
+  /** The building `c` is in (see Campus.here). */
+  hereOf(c: Client): string;
+  /** `c`'s building's floors, for its welcome (counted as sent, see sendFloors). */
+  floorsFor(c: Client): FloorInfo[];
+  /** Sends `c` its building's floors and what it sees of the campus, where they've changed since. */
+  sendFloors(c: Client): void;
   /**
    * Takes `floor` off the building (already out of floors.json): everyone on it rides the elevator to
    * the next floor, or out to the lobby if it was the last (the roof goes with it), and its workers stop.
@@ -146,8 +158,8 @@ export interface Navigation {
   goToFloor(c: Client, floor: Floor, at?: Spot): void;
   /** Up to the rooftop bar, by elevator. */
   goToRoof(c: Client): void;
-  /** Out to the lobby, where the elevator has nowhere to go: the building's last floor was taken off. */
-  toLobby(c: Client): void;
+  /** Out to the lobby, where the elevator has nowhere to go: the building's last floor was taken off, or it's `building`, which has none yet. */
+  toLobby(c: Client, building?: string): void;
 }
 
 /** What has to be true before something happens for someone (office/gates.ts). */
