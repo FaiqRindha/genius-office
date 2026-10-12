@@ -8,6 +8,7 @@ import type { Accounts } from '../accounts.js';
 import type { SignIns, GhAs } from '../signins.js';
 import type { GitLabSignIns } from '../gitlab.js';
 import type { GitLabWorld } from '../gitlab-world.js';
+import type { GitLabAccess } from '../gitlab-access.js';
 import type { ModelCatalogue } from '../models.js';
 import type { Tailnet } from '../tailnet.js';
 import type { Team } from '../team.js';
@@ -71,6 +72,8 @@ export interface BuildingServices {
   gitlab: GitLabSignIns;
   /** Every project on that GitLab, as the city's districts, buildings and floors. */
   gitlabWorld: GitLabWorld;
+  /** Each account's role in each of its projects: who may go onto which of its floors. */
+  gitlabAccess: GitLabAccess;
   /** The office's own Claude plan limits. */
   limits: PlanLimitsReader;
   /** Each account's own, once it runs on a Claude sign-in of its own. */

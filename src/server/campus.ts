@@ -14,7 +14,23 @@ import { MAIN_BUILDING, type BuildingInfo, type CampusPerson, type CampusState }
  *
  * Which building someone is in is the one their floor is in; up on the roof or out in a lobby, it's the
  * last one they were in (see `place`).
+ *
+ * With the GitLab world (see gitlab-world.ts), accounts no longer have buildings of their own: every
+ * floor is the office's own, but a floor that's a GitLab project, which is in its namespace's building
+ * in the GitLab Quarter ("gitlab:<group/subgroup>"). Who may go into one of those is up to their own
+ * GitLab access, floor by floor (see floorGate and mayEnterFloor).
  */
+
+/** The building of a floor that's a GitLab project: its namespace's, in the GitLab Quarter. */
+export const GITLAB_BUILDING = 'gitlab:';
+
+/** A floor as the campus sees it. */
+export interface CampusFloor {
+  owner?: string;
+  /** Its GitLab project's page and id (see FloorDef.gitlab). */
+  gitlab?: string;
+  gitlabProjectId?: number;
+}
 
 /** Who's asking: a connection's account, and whether it's an admin (the shared password is one). */
 export interface Who {
@@ -30,6 +46,8 @@ export class Campus {
   private file: string;
   /** The building each connection was last in, for when they're on the roof or in a lobby. */
   private last = new Map<string, string>();
+  /** Whether `who` may go onto a floor, beyond its building's door (their GitLab access: see gitlab-access.ts). */
+  floorGate?: (who: Who, floor: CampusFloor) => boolean;
 
   constructor(
     dataDir: string,
@@ -41,15 +59,27 @@ export class Campus {
     this.load();
   }
 
-  /** The building a floor is in: its owner's, while that account is there, else the office's own. */
-  of(def: { owner?: string }): string {
-    return def.owner && this.accounts.get(def.owner) ? def.owner : MAIN_BUILDING;
+  /** The building a floor is in: a GitLab project's namespace's, else the office's own. */
+  of(def: CampusFloor): string {
+    if (def.gitlab) {
+      try {
+        return GITLAB_BUILDING + new URL(def.gitlab).pathname.split('/').filter(Boolean).slice(0, -1).join('/');
+      } catch {
+        // not a page: the office's own
+      }
+    }
+    return MAIN_BUILDING;
   }
 
-  /** Whether `who`'s card opens `building`'s door. */
+  /** Whether `who`'s card opens `building`'s door. A GitLab building's is open: its floors are each their own (see mayEnterFloor). */
   mayEnter(who: Who, building: string): boolean {
-    if (building === MAIN_BUILDING || who.admin || !who.accountId) return true;
+    if (building === MAIN_BUILDING || building.startsWith(GITLAB_BUILDING) || who.admin || !who.accountId) return true;
     return building === who.accountId || (this.guests[building] ?? []).includes(who.accountId);
+  }
+
+  /** Whether `who` may go onto `floor`: its building's door, and the floor's own gate (a GitLab project's access). */
+  mayEnterFloor(who: Who, floor: CampusFloor): boolean {
+    return this.mayEnter(who, this.of(floor)) && (this.floorGate?.(who, floor) ?? true);
   }
 
   /** Remembers that connection `id` was last in `building`. */
@@ -62,22 +92,22 @@ export class Campus {
   }
 
   /** The building connection `id` is in: its floor's, else the last one it was in, else its own (or the office's). */
-  here(id: string, who: Who, floor: { owner?: string } | undefined): string {
+  here(id: string, _who: Who, floor: CampusFloor | undefined): string {
     if (floor) {
       const b = this.of(floor);
       this.last.set(id, b);
       return b;
     }
-    return this.last.get(id) ?? (who.accountId && this.accounts.get(who.accountId) ? who.accountId : MAIN_BUILDING);
+    return this.last.get(id) ?? MAIN_BUILDING;
   }
 
-  /** Every building, in the order they stand (see buildingAt): the office's own on the main street, then each account's, oldest first. */
+  /** Every building that stands round the main street: the office's own (accounts have none now, see above). */
   ids(): string[] {
-    return [MAIN_BUILDING, ...this.accounts.list().map((a) => a.id)];
+    return [MAIN_BUILDING];
   }
 
   /** What `who`, in `here`, sees of the campus: `defs` are every floor (on its way too), `open` the ones open, bottom one first. */
-  state(who: Who, here: string, defs: readonly { owner?: string }[], open: readonly { id: string; owner?: string }[] = []): CampusState {
+  state(who: Who, here: string, defs: readonly CampusFloor[], open: readonly ({ id: string } & CampusFloor)[] = []): CampusState {
     const floors: CampusState['floors'] = {};
     const up = new Map<string, number>();
     for (const f of open) {
@@ -98,6 +128,9 @@ export class Campus {
         ...(bottom ? { bottom } : {}),
       };
     });
+    // A GitLab building's floors are built where the office's are (the Quarter's buildings are drawn
+    // on their own, see gitlab-world), so for the world round you, you're at the office's.
+    if (here.startsWith(GITLAB_BUILDING)) here = MAIN_BUILDING;
     const own = who.accountId && this.accounts.get(who.accountId) ? who.accountId : undefined;
     if (!own) return { buildings, here, floors };
     const guests = this.guestsOf(own);

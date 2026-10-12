@@ -8,6 +8,7 @@ import type { HandlerMap, ViewPieces } from './types.js';
 import type { Ctx } from '../../office/context.js';
 import type { Client } from '../../office/client.js';
 import type { FloorDef } from '../../building.js';
+import { GITLAB_BUILDING } from '../../campus.js';
 
 /**
  * Why `label` can't be added for `c`: it's already the floor `taken` (a project is a floor in one
@@ -15,6 +16,7 @@ import type { FloorDef } from '../../building.js';
  */
 export function alreadyAFloor(ctx: Ctx, c: Client, taken: FloorDef, label: string): string {
   const b = ctx.campus.of(taken);
+  if (b.startsWith(GITLAB_BUILDING)) return `${label} already has a floor in the GitLab Quarter, in ${b.slice(GITLAB_BUILDING.length) || 'its group'}'s building: go in at its door`;
   const owner = ctx.accounts.get(b)?.name ?? 'its owner';
   const where = b === c.accountId ? 'your building' : b === MAIN_BUILDING ? "the office's own building" : `${owner}'s building`;
   const how = b === c.accountId ? '' : ctx.campus.mayEnter(c, b) ? ': walk over and tap your ID card at its door' : `: ask ${owner} to put you on their guest list`;
@@ -33,7 +35,7 @@ export const floorHandlers = {
     const floor = ctx.floors.get(str(msg.floor, 64));
     if (!floor) ctx.warn(c, ctx.building.pending().some((d) => d.id === msg.floor) ? "That floor is still being cloned — it'll be ready in a moment" : 'No such floor');
     // Into someone else's building only on their guest list (see campus.ts).
-    else if (!ctx.campus.mayEnter(c, ctx.campus.of(floor.def))) ctx.warn(c, "That floor's in someone else's building, and your card doesn't open it");
+    else if (!ctx.campus.mayEnterFloor(c, floor.def)) ctx.warn(c, "That floor's in someone else's building, and your card doesn't open it");
     else ctx.goToFloor(c, floor, arrivalSpot(msg.at));
   },
   'floor.repos'(ctx, c, msg) {

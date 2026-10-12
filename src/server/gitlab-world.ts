@@ -74,6 +74,17 @@ export class GitLabWorld {
     return this.current;
   }
 
+  /** Project `id` of the world, if it's in it. */
+  project(id: number): WorldProject | undefined {
+    return this.saved?.projects.find((p) => p.id === id);
+  }
+
+  /** The world's project whose page is `url` (a floor from before floors knew their project's id). */
+  projectAt(url: string): WorldProject | undefined {
+    const tidy = (u: string) => u.replace(/\/+$/, '').toLowerCase();
+    return this.saved?.projects.find((p) => p.webUrl && tidy(p.webUrl) === tidy(url));
+  }
+
   start() {
     void this.sync();
     this.timer = setInterval(() => void this.sync(), SYNC_MS);
