@@ -132,7 +132,9 @@ export function gitlabAdder(net: Net, ride: (floor: string) => void, setup: bool
     listEl.replaceChildren(...rows);
     const pick = choice();
     const on = adding ? floorOf(adding) : undefined;
-    const dest = `${store.projectsDir.dir}/${store.gitlab?.url ? new URL(store.gitlab.url).host.replace(/:/g, '_') : '<host>'}/${pick ?? '<group>/<project>'}`;
+    // Where the office clones it (see Building.addGitLab): <host>/<group.subgroup>/<project>.
+    const where = pick ? `${pick.split('/').slice(0, -1).join('.')}/${pick.split('/').pop()}` : '<group>/<project>';
+    const dest = `${store.projectsDir.dir}/${store.gitlab?.url ? new URL(store.gitlab.url).host.replace(/:/g, '_') : '<host>'}/${where}`;
     const lines: (HTMLElement | null)[] = adding
       ? [
           h('p.note.busy', {}, on ? `⏳ Cloning ${adding} from ${host}` : `⏳ Asking ${host} about ${adding}…`),

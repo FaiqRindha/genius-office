@@ -182,7 +182,9 @@ test('a GitLab project becomes a floor, cloned with git and its adder’s creden
   assert.equal(started, 1);
   assert.equal(floor.gitlab, src.url);
   assert.equal(floor.repo, undefined);
-  assert.equal(floor.dir, path.join(root, 'projects', 'gitlab.example.com', 'grp', 'sub', 'app'));
+  // Its namespace as one folder, so no project's checkout is inside another's.
+  assert.equal(floor.dir, path.join(root, 'projects', 'gitlab.example.com', 'grp.sub', 'app'));
+  assert.equal(floor.owner, ID);
   assert.ok(existsSync(path.join(floor.dir, 'README.md')));
   assert.match(await building.addGitLab(src, env, 'faiq', () => {}, ID) as string, /already has a floor/);
   // A fresh start of the office still knows it's that GitLab project.
@@ -192,6 +194,12 @@ test('a GitLab project becomes a floor, cloned with git and its adder’s creden
   const other = { ...src, url: 'https://gitlab.example.com/grp/other', cloneUrl: 'https://gitlab.example.com/grp/other.git', path: 'grp/other', name: 'other' };
   mkdirSync(path.join(root, 'projects', 'gitlab.example.com', 'grp', 'other'), { recursive: true });
   execFileSync('git', ['init', '-q', path.join(root, 'projects', 'gitlab.example.com', 'grp', 'other')]);
+  // grp/sub/app and grp.sub/app/tool: side by side, never one inside the other.
+  const tool = { ...src, url: 'https://gitlab.example.com/grp/sub/app/tool', cloneUrl: 'https://gitlab.example.com/grp/sub/app/tool.git', path: 'grp/sub/app/tool', name: 'tool' };
+  execFileSync('git', ['clone', '-q', '--bare', work, path.join(remotes, 'grp', 'sub', 'app', 'tool.git')]);
+  const t2 = await building.addGitLab(tool, env, 'faiq', () => {}, ID);
+  assert.equal(typeof t2, 'object', String(t2));
+  assert.equal((t2 as Exclude<typeof t2, string>).dir, path.join(root, 'projects', 'gitlab.example.com', 'grp.sub.app', 'tool'));
   assert.match(await building.addGitLab(other, env, 'faiq', () => {}, ID) as string, /isn't a checkout of/);
 });
 
@@ -199,4 +207,44 @@ test('git clones of a GitLab say what to do when it turns them down', async () =
   const { whyGitLabCloneFailed } = await import('../src/server/gitlab-projects.ts');
   assert.match(whyGitLabCloneFailed("Cloning into 'x'...\nremote: HTTP Basic: Access denied\nfatal: Authentication failed for 'https://g.example/x.git/'", 'g.example'), /read_repository/);
   assert.match(whyGitLabCloneFailed('fatal: unable to access: SSL certificate problem: self-signed certificate', 'g.example'), /certificate/);
+});
+
+test("a GitLab floor from before buildings had owners is in its adder's building", async () => {
+  const { Building } = await import('../src/server/building.ts');
+  const root = mkdtempSync(path.join(os.tmpdir(), 'ao-gitlab-owner-'));
+  const dataDir = path.join(root, '.agent-office');
+  mkdirSync(dataDir);
+  const base = { palette: 0, addedBy: 'faiq', addedAt: 1 };
+  writeFileSync(
+    path.join(dataDir, 'floors.json'),
+    JSON.stringify([
+      { ...base, id: 'old-gl', name: 'old-gl', gitlab: 'https://gitlab.example.com/g/old', gitlabAccount: ID, dir: path.join(root, 'a') },
+      { ...base, id: 'mine', name: 'mine', gitlab: 'https://gitlab.example.com/g/mine', gitlabAccount: ID, owner: 'someoneelse1', dir: path.join(root, 'b') },
+      { ...base, id: 'gh', name: 'gh', repo: 'acme/app', dir: path.join(root, 'c') },
+    ]),
+  );
+  const owners = new Building(dataDir, path.join(root, 'projects')).list().map((d) => [d.id, d.owner]);
+  assert.deepEqual(owners, [
+    ['old-gl', ID],
+    // An owner it has stays; an old GitHub floor stays the office's own.
+    ['mine', 'someoneelse1'],
+    ['gh', undefined],
+  ]);
+});
+
+test("a new floor never goes inside another floor's checkout, or round one", async () => {
+  const { Building } = await import('../src/server/building.ts');
+  const root = mkdtempSync(path.join(os.tmpdir(), 'ao-gitlab-nest-'));
+  const dataDir = path.join(root, '.agent-office');
+  mkdirSync(dataDir);
+  const projects = path.join(root, 'projects');
+  // g/outer/inner, where the first layout put it: <host>/g/outer/inner.
+  const inner = path.join(projects, 'gitlab.example.com', 'g', 'outer', 'inner');
+  writeFileSync(path.join(dataDir, 'floors.json'), JSON.stringify([{ id: 'inner', name: 'inner', palette: 0, addedBy: 'x', addedAt: 1, gitlab: 'https://gitlab.example.com/g/outer/inner', dir: inner }]));
+  const building = new Building(dataDir, projects);
+  let started = 0;
+  // g/outer goes to <host>/g/outer: round inner's checkout.
+  const outer = { url: 'https://gitlab.example.com/g/outer', cloneUrl: 'https://gitlab.example.com/g/outer.git', path: 'g/outer', name: 'outer', host: 'gitlab.example.com', empty: false };
+  assert.match((await building.addGitLab(outer, {}, 'x', () => started++, ID)) as string, /would be in inner's checkout, or have it inside/);
+  assert.equal(started, 0);
 });
