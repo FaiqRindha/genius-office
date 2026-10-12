@@ -1,14 +1,14 @@
 import { execFileSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
-import type { ChangesState, FloorInfo, PeerInfo, ProjectInfo, ServerMsg, WorkerInfo } from '../shared/protocol.js';
+import type { ChangesState, FloorInfo, GhIssue, GhPull, GhState, PeerInfo, ProjectInfo, ServerMsg, WorkerInfo } from '../shared/protocol.js';
 import { isBusy } from '../shared/status.js';
 import { DESK_BY_ID } from '../shared/layout.js';
 import type { FloorDef } from './building.js';
 import { excludeFromGit } from './config.js';
 import { agentProviders, configuredProvider } from './agents.js';
 import { WorkerManager, workedMs, type HookEnv, type RunAs } from './workers.js';
-import { GitHub, MergeWatch } from './github.js';
+import { GitHub, MergeWatch, type Boards } from './github.js';
 import type { GhAs } from './signins.js';
 import { TaskQueue } from './queue.js';
 import { Changes } from './changes.js';
@@ -45,8 +45,13 @@ export interface FloorContext {
   prompts: PromptSource;
   /** Workers hired by an account run on its own sign-ins (see signins.ts). */
   runAs?: RunAs;
-  /** How to run gh as an account: its own sign-in, the office's (undefined), or why it can't. */
-  ghAs(owner: string | undefined): GhAs | undefined | string;
+  /**
+   * How to act on the floor's GitHub (or, with `gitlab`, its GitLab project) as an account: its own
+   * sign-in, the office's (undefined), or why it can't.
+   */
+  ghAs(owner: string | undefined, gitlab?: string): GhAs | undefined | string;
+  /** The boards of a floor whose project is on a GitLab (see gitlab-boards.ts). */
+  gitlabBoards?(def: FloorDef, onIssues: (s: GhState<GhIssue>) => void, onPulls: (s: GhState<GhPull>) => void): Boards;
   /** To everyone on this floor. */
   emit(floor: Floor, msg: ServerMsg, droppable?: boolean): void;
   toast(floor: Floor, text: string, level?: ToastLevel): void;
@@ -113,7 +118,8 @@ export class Floor {
   readonly dir: string;
   readonly project: ProjectInfo;
   readonly workers: WorkerManager;
-  readonly github: GitHub;
+  /** Its boards: GitHub's, or its GitLab project's. */
+  readonly github: Boards;
   readonly queue: TaskQueue;
   readonly changes: Changes;
   readonly decor: Decor;
@@ -207,10 +213,8 @@ export class Floor {
     );
     this.workers.wing = () => this.plan.wing;
 
-    this.github = new GitHub(
-      def.dir,
-      (state) => ctx.emit(this, { t: 'gh.issues', state }),
-      (state) => {
+    const onIssues = (state: GhState<GhIssue>) => ctx.emit(this, { t: 'gh.issues', state });
+    const onPulls = (state: GhState<GhPull>) => {
         ctx.emit(this, { t: 'gh.pulls', state });
         this.queue?.onPulls(state.items);
         if (state.loading || state.error) return;
@@ -222,8 +226,8 @@ export class Floor {
         }
         this.sendLandedHome();
         ctx.pullsChanged(this);
-      },
-    );
+    };
+    this.github = def.gitlab && ctx.gitlabBoards ? ctx.gitlabBoards(def, onIssues, onPulls) : new GitHub(def.dir, onIssues, onPulls);
     // The 📋 task queue seats workers by itself: it watches the workers and links PRs from GitHub.
     this.queue = new TaskQueue(dataDir, this.workers, !!this.project.branch, {
       update: (state) => {
@@ -233,7 +237,7 @@ export class Floor {
       },
       toast: (text, level) => ctx.toast(this, text, level),
       claimIssue: (issue, owner) => {
-        const as = ctx.ghAs(owner);
+        const as = ctx.ghAs(owner, def.gitlab);
         return typeof as === 'string' ? Promise.resolve(as) : this.github.claim(issue, as);
       },
       refreshGitHub: () => void this.github.refresh(),
@@ -268,7 +272,7 @@ export class Floor {
         toast: (text, level) => ctx.toast(this, text, level),
         hiringPaused: () => ctx.ledger.hiringPaused,
         postReview: (pr, file, owner) => {
-          const as = ctx.ghAs(owner);
+          const as = ctx.ghAs(owner, def.gitlab);
           return typeof as === 'string' ? Promise.reject(new Error(as)) : this.github.review(pr, file, as);
         },
         prompt: (id) => ctx.prompts.text(id),

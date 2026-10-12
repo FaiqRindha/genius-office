@@ -1,8 +1,9 @@
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import type { GitLabProject, GitLabState } from '../shared/protocol.js';
 import { listProjects as askProjects } from './gitlab-projects.js';
 import type { RunAs } from './workers/types.js';
+import type { GhAs } from './signins.js';
 
 /*
  * Everyone's own GitLab
@@ -88,6 +89,37 @@ export class GitLabSignIns {
   creds(id: string): { url: string; token: string } | undefined {
     const s = this.load(id);
     return s && { url: s.url, token: s.token };
+  }
+
+  /**
+   * How the office acts on a GitLab floor for `id` (see gitlab-boards.ts): their own GitLab, or why
+   * it can't. Shaped like GitHub's (SignIns.ghAs), so the boards take either.
+   */
+  ghAs(id: string): GhAs | string {
+    const s = this.load(id);
+    if (!s) return 'Sign in to GitLab first (☰ → 🔐 Your sign-ins): the office acts on GitLab as you';
+    return { key: `gitlab:${id}`, env: { GITLAB_HOST: s.url, GITLAB_TOKEN: s.token } };
+  }
+
+  /**
+   * Who reads the boards of the GitLab project at `project`: `prefer` (the account that added it)
+   * while it's signed in to that GitLab, else anyone who is. Undefined when nobody is.
+   */
+  reader(project: string, prefer?: string): { url: string; token: string } | undefined {
+    const on = (s: Saved | undefined) => !!s && project.toLowerCase().startsWith(`${s.url.toLowerCase()}/`);
+    const first = prefer && ACCOUNT_ID.test(prefer) ? this.load(prefer) : undefined;
+    if (on(first)) return { url: first!.url, token: first!.token };
+    let ids: string[] = [];
+    try {
+      ids = readdirSync(this.homes).filter((n) => ACCOUNT_ID.test(n)).sort();
+    } catch {
+      // nobody has signed in to anything yet
+    }
+    for (const id of ids) {
+      const s = this.load(id);
+      if (on(s)) return { url: s!.url, token: s!.token };
+    }
+    return undefined;
   }
 
   /** The projects `id`'s GitLab sign-in can see, most recently active first (asked afresh with `refresh`). */

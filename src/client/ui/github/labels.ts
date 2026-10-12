@@ -5,6 +5,7 @@ import { h, openModal } from '../dom';
 import { repoUrlOf } from '../markdown';
 import { getJson, labelWaiters } from './api';
 import { errorBox, spinnerRow } from './pieces';
+import { forgeName, onGitLab } from '../forge';
 
 // ---- Labels -----------------------------------------------------------------------------------
 
@@ -24,7 +25,7 @@ export function openLabels(kind: 'issue' | 'pull', it: GhIssue | GhPull, net: Ne
   const had = new Set(it.labels.map((l) => l.name));
   const on = new Set(had);
   const noun = kind === 'pull' ? 'PR' : 'issue';
-  const manage = `${repoUrlOf(it.url)}/labels`;
+  const manage = `${repoUrlOf(it.url)}${onGitLab() ? '/-/labels' : '/labels'}`;
   let repo: GhLabel[] | null = null;
   let error = '';
   let busy = false;
@@ -66,7 +67,7 @@ export function openLabels(kind: 'issue' | 'pull', it: GhIssue | GhPull, net: Ne
     const empty = !!repo && !shown;
     none.classList.toggle('hidden', !empty);
     if (empty)
-      none.replaceChildren(q ? `No labels match “${filter.value.trim()}”. ` : 'This repository has no labels yet. ', h('a', { href: manage, target: '_blank', rel: 'noopener noreferrer' }, 'Make one on GitHub ↗'));
+      none.replaceChildren(q ? `No labels match “${filter.value.trim()}”. ` : 'This repository has no labels yet. ', h('a', { href: manage, target: '_blank', rel: 'noopener noreferrer' }, `Make one on ${forgeName()} ↗`));
   };
   const row = (l: GhLabel) => {
     const box = h('input', { type: 'checkbox' }) as HTMLInputElement;
@@ -117,11 +118,11 @@ export function openLabels(kind: 'issue' | 'pull', it: GhIssue | GhPull, net: Ne
     if (busy || (!add.length && !remove.length)) return;
     busy = true;
     result.className = 'gh-merge-result';
-    result.replaceChildren(h('span.spinner'), 'Saving the labels on GitHub…');
+    result.replaceChildren(h('span.spinner'), `Saving the labels on ${forgeName()}…`);
     sync();
     labelWaiters.set(key, (msg) => {
       settle();
-      if (!msg.labels) return fail(msg.error ?? 'GitHub did not take the labels');
+      if (!msg.labels) return fail(msg.error ?? `${forgeName()} did not take the labels`);
       modal.close();
       onSaved?.(msg.labels);
     });
