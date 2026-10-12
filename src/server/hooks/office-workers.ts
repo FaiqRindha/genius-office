@@ -14,13 +14,16 @@ import { readBody, send } from '../http/util.js';
  * on the floor's list. A string says why it can't be.
  */
 async function pullOf(floor: Floor, n: number, repo?: string): Promise<{ number: number; url: string } | string> {
-  const here = floor.def.repo;
-  if (repo && here && repo.toLowerCase() !== here.toLowerCase()) return `That pull request is in ${repo}, and this floor is ${here}`;
+  // owner/name on GitHub, or a GitLab floor's group/project.
+  const here = floor.def.gitlab ? new URL(floor.def.gitlab).pathname.replace(/^\/+/, '') : floor.def.repo;
+  if (repo && here && !here.toLowerCase().endsWith(repo.toLowerCase())) return `That pull request is in ${repo}, and this floor is ${here}`;
   const listed = floor.github.pulls.items.find((p) => p.number === n);
   let pr: { url: string; state: string } | undefined = listed;
   if (!pr) {
     try {
-      pr = JSON.parse(await gh(['pr', 'view', String(n), '--json', 'url,state'], floor.dir)) as { url: string; state: string };
+      pr = floor.def.gitlab
+        ? { url: `${floor.def.gitlab}/-/merge_requests/${n}`, state: (await floor.github.pullDetail(n)).state }
+        : (JSON.parse(await gh(['pr', 'view', String(n), '--json', 'url,state'], floor.dir)) as { url: string; state: string });
     } catch (err) {
       return `No pull request #${n} here: ${(err as Error).message}`;
     }

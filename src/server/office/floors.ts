@@ -4,6 +4,7 @@ import type { FloorDef } from '../building.js';
 import { Floor, type FloorContext } from '../floor.js';
 import { withGitLab } from '../gitlab.js';
 import { GitLabBoards } from '../gitlab-boards.js';
+import { setGitLabFloor } from '../forge.js';
 import { ROOF } from '../../shared/rooftop.js';
 import type { FloorInfo, ServerMsg } from '../../shared/protocol.js';
 import type { Ctx, FloorHelpers, FloorsOpen } from './context.js';
@@ -121,7 +122,12 @@ export async function openFloors(ctx: Ctx, hookPort: number): Promise<FloorsOpen
     locksUp: () => !!ctx.maps.plan().sendHome?.keeps,
     runAs: withGitLab(ctx.signins, ctx.gitlab),
     ghAs: (owner, gitlab) => (owner ? (gitlab ? ctx.gitlab.ghAs(owner) : ctx.signins.ghAs(owner)) : undefined),
-    gitlabBoards: (def, onIssues, onPulls) => new GitLabBoards(def.gitlab!, () => ctx.gitlab.reader(def.gitlab!, def.gitlabAccount), onIssues, onPulls),
+    gitlabBoards: (def, onIssues, onPulls) => {
+      const reader = () => ctx.gitlab.reader(def.gitlab!, def.gitlabAccount);
+      // Its checkout's git and pull requests ask for it by folder (see forge.ts).
+      setGitLabFloor(def.dir, { project: def.gitlab!, reader });
+      return new GitLabBoards(def.gitlab!, reader, onIssues, onPulls);
+    },
   };
   /** Whether a worker on `from` works in `on`'s project too (see WorkerInfo.repos). */
   const worksIn = (from: Floor, on: Floor) => from.workers.list().some((w) => w.repos?.some((r) => r.floor === on.id));

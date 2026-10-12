@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'nod
 import path from 'node:path';
 import type { GitLabProject, GitLabState } from '../shared/protocol.js';
 import { listProjects as askProjects } from './gitlab-projects.js';
+import { addGitCredentials, gitlabEnv } from './forge.js';
 import type { RunAs } from './workers/types.js';
 import type { GhAs } from './signins.js';
 
@@ -27,8 +28,6 @@ const LOOK_GAP_MS = 60_000;
 /** How long the projects someone's GitLab can see are reused before it's asked again. */
 const PROJECTS_TTL_MS = 5 * 60_000;
 const LOOK_TIMEOUT_MS = 15_000;
-/** git asks it for a password for the GitLab, and it answers with the token in the worker's environment. */
-const CREDENTIAL_HELPER = `!f() { test "$1" = get && printf 'username=oauth2\\npassword=%s\\n' "$GITLAB_TOKEN"; }; f`;
 
 interface Saved {
   url: string;
@@ -98,7 +97,8 @@ export class GitLabSignIns {
   ghAs(id: string): GhAs | string {
     const s = this.load(id);
     if (!s) return 'Sign in to GitLab first (☰ → 🔐 Your sign-ins): the office acts on GitLab as you';
-    return { key: `gitlab:${id}`, env: { GITLAB_HOST: s.url, GITLAB_TOKEN: s.token } };
+    // The whole environment, as GitHub's is: git pushes with it too.
+    return { key: `gitlab:${id}`, env: gitlabEnv(process.env, s) };
   }
 
   /**
@@ -208,14 +208,7 @@ export class GitLabSignIns {
     if (!s) return env;
     env.GITLAB_HOST = s.url;
     env.GITLAB_TOKEN = s.token;
-    // Added to whatever git config the environment already carries: '' clears the helpers before it.
-    const n = Number(env.GIT_CONFIG_COUNT) || 0;
-    const key = `credential.${new URL(s.url).origin}.helper`;
-    env[`GIT_CONFIG_KEY_${n}`] = key;
-    env[`GIT_CONFIG_VALUE_${n}`] = '';
-    env[`GIT_CONFIG_KEY_${n + 1}`] = key;
-    env[`GIT_CONFIG_VALUE_${n + 1}`] = CREDENTIAL_HELPER;
-    env.GIT_CONFIG_COUNT = String(n + 2);
+    addGitCredentials(env, s.url);
     return env;
   }
 

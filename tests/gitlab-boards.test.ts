@@ -161,7 +161,11 @@ test("a GitLab floor's boards are read by whoever added it, else anyone on that 
   signins.signOut('cccccc3');
   assert.equal(signins.reader(PROJECT, 'cccccc3')?.token, 'glpat-bbbbbbbbbbbbbbb2');
   assert.equal(signins.reader('https://nowhere.example/g/p'), undefined);
-  assert.deepEqual(signins.ghAs('bbbbbb2'), { key: 'gitlab:bbbbbb2', env: { GITLAB_HOST: 'https://gitlab.example.com', GITLAB_TOKEN: 'glpat-bbbbbbbbbbbbbbb2' } });
+  const as = signins.ghAs('bbbbbb2') as { key: string; env: Record<string, string> };
+  assert.equal(as.key, 'gitlab:bbbbbb2');
+  // The whole environment, with the token and git's credentials for that GitLab: git pushes with it.
+  assert.deepEqual([as.env.GITLAB_HOST, as.env.GITLAB_TOKEN, as.env.PATH], ['https://gitlab.example.com', 'glpat-bbbbbbbbbbbbbbb2', process.env.PATH]);
+  assert.match(as.env[`GIT_CONFIG_KEY_${Number(as.env.GIT_CONFIG_COUNT) - 1}`], /^credential\.https:\/\/gitlab\.example\.com\.helper$/);
   assert.match(signins.ghAs('cccccc3') as string, /Sign in to GitLab first/);
 });
 

@@ -4,6 +4,7 @@ import { rm } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import type { LostBranch, WorktreeState } from '../shared/protocol.js';
+import { gitlabEnv, gitlabFloorAt } from './forge.js';
 
 export type { WorktreeCleanup, WorktreeState } from '../shared/protocol.js';
 
@@ -83,7 +84,11 @@ export class Worktrees {
     const from = this.currentBranch();
     if (!from || !this.hasOrigin()) return undefined;
     // Never stop to ask for a password: there's nobody at the office's terminal to type it.
-    const env = { ...process.env, GIT_TERMINAL_PROMPT: '0' };
+    const base = { ...process.env, GIT_TERMINAL_PROMPT: '0' };
+    // A GitLab floor's project is fetched with the token of whoever reads it (see forge.ts).
+    const gitlab = gitlabFloorAt(this.dir);
+    const reader = gitlab?.reader();
+    const env = reader ? gitlabEnv(base, reader) : base;
     this.fetching = execFileP('git', ['fetch', '--quiet', '--no-tags', 'origin', from], { cwd: this.dir, env, timeout: FETCH_TIMEOUT_MS })
       .then(
         () => (this.fetchError = undefined),

@@ -3,6 +3,7 @@ import { readFile, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { ImageResult } from './decor.js';
 import { changedImageType, type ChangedFile, type ChangeStatus, type ChangesState } from '../shared/protocol.js';
+import { createMr, gitlabFloorAt, pushEnv } from './forge.js';
 
 // What a worker changed, for the Changes window at its desk: the files it touched and their diff,
 // against the branch the office was opened on. While anyone has the window open, the office polls
@@ -318,11 +319,18 @@ export class Changes {
       const remotes = (await git(['remote'], t.cwd)).split('\n').filter(Boolean);
       const remote = remotes.includes('origin') ? 'origin' : remotes[0];
       if (!remote) return 'This project has no git remote to push to';
-      await git(['push', '-u', remote, s.branch], t.cwd, 120_000, env);
-      const r = await run('gh', ['pr', 'create', '--head', s.branch, '--base', s.prBase, '--title', title.trim(), '--body', body], t.cwd, 120_000, env);
-      const url = r.out.trim().split('\n').pop() ?? '';
-      if (r.code !== 0 || !/^https?:\/\//.test(url)) throw new GitError(reason(r, url || 'gh pr create failed'));
-      const number = Number(/\/(\d+)$/.exec(url)?.[1] ?? 0);
+      // A GitLab floor's: pushed with a GitLab token, and a merge request opened (see forge.ts).
+      const gitlab = gitlabFloorAt(t.cwd);
+      await git(['push', '-u', remote, s.branch], t.cwd, 120_000, gitlab ? pushEnv(gitlab, env) : env);
+      let number: number;
+      let url: string;
+      if (gitlab) ({ number, url } = await createMr(gitlab, s.branch, s.prBase, title.trim(), body, env));
+      else {
+        const r = await run('gh', ['pr', 'create', '--head', s.branch, '--base', s.prBase, '--title', title.trim(), '--body', body], t.cwd, 120_000, env);
+        url = r.out.trim().split('\n').pop() ?? '';
+        if (r.code !== 0 || !/^https?:\/\//.test(url)) throw new GitError(reason(r, url || 'gh pr create failed'));
+        number = Number(/\/(\d+)$/.exec(url)?.[1] ?? 0);
+      }
       this.opened.set(openedKey(repo, s.branch), { number, url });
       this.events.toast(`${who} opened a pull request for ${t.name}: ${url}`, 'info');
       (t.refreshGitHub ?? this.events.refreshGitHub)();
