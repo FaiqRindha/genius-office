@@ -2,6 +2,7 @@ import path from 'node:path';
 import { childEnv, resolveCommand } from '../workers.js';
 import { SignIns } from '../signins.js';
 import { GitLabSignIns } from '../gitlab.js';
+import { GitLabWorld } from '../gitlab-world.js';
 import { agentProviders, configuredProvider } from '../agents.js';
 import { Tailnet } from '../tailnet.js';
 import { Team } from '../team.js';
@@ -64,7 +65,12 @@ export function createServices(ctx: Ctx): BuildingServices {
   // And their own self-hosted GitLab, next to them (see gitlab.ts).
   const gitlab = new GitLabSignIns(cfg.dataDir, (id) => {
     for (const c of clients.values()) if (c.accountId === id && !c.out) ctx.sendTo(c, { t: 'gitlab', state: gitlab.state(id) });
+    // Someone signed in or out: the world is what everyone's tokens see.
+    gitlabWorld.poke();
   });
+  // Every project on that GitLab, standing in the city (see gitlab-world.ts).
+  const gitlabWorld = new GitLabWorld(cfg.dataDir, () => gitlab.everyone(), (state) => ctx.broadcast({ t: 'gitlab.world', state }, undefined, true));
+  gitlabWorld.start();
   // Accounts revoked from the terminal while the office was closed leave their sign-ins behind.
   if (!accounts.unreadableFile) signins.prune(new Set(accounts.state(new Set()).accounts.map((a) => a.id)));
 
@@ -130,7 +136,7 @@ export function createServices(ctx: Ctx): BuildingServices {
     });
   };
 
-  return { sky, themes, maps, prompts, leaveOnMerge, ledger, signins, gitlab, limits, accountLimits, webhook, machine, limitsOf, pumpQueues };
+  return { sky, themes, maps, prompts, leaveOnMerge, ledger, signins, gitlab, gitlabWorld, limits, accountLimits, webhook, machine, limitsOf, pumpQueues };
 }
 
 /** What's made once the floors are open: the SSH team, the tailnet, workers' web servers, pictures and upgrades. */

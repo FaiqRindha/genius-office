@@ -37,6 +37,10 @@ export const gitlabHandlers = {
     if (!id) return;
     ctx.gitlab.signOut(id);
   },
+  'gitlab.world'(ctx, c) {
+    // Everyone sees the city; who may go into a floor is another matter (later: their own GitLab access).
+    ctx.sendTo(c, { t: 'gitlab.world', state: ctx.gitlabWorld.state() ?? null });
+  },
   'gitlab.projects'(ctx, c, msg) {
     const id = accountOf(ctx, c);
     if (!id) return;
