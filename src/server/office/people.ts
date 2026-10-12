@@ -36,6 +36,8 @@ export function people(ctx: Ctx): People {
       }
       if (me.admin) ctx.sendTo(c, { t: 'accounts', state: (state ??= ctx.accounts.state(onlineAccounts())) });
     }
+    // A new account is a new building on the campus, and a revoked one's floors are the office's.
+    ctx.floorsChanged();
   };
   return { meOf, stillIn, signOut, onlineAccounts, accountsChanged };
 }

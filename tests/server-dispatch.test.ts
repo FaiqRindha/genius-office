@@ -331,6 +331,8 @@ test('the toys on a floor, and letting go of them on leaving the floor or the of
   const cy = (await a.take('welcome')).you;
   const b = await Browser.open('?name=Di');
   await b.take('welcome');
+  // What Di sees of the campus comes right after.
+  await b.take('campus');
   await a.take('peer.join');
 
   a.send({ t: 'jukebox.skip' });

@@ -444,7 +444,7 @@ export class SignIns {
     this.stop(id, 'github');
     const l = this.get(id);
     const env = { ...this.githubEnv(id), BROWSER: 'true', GH_BROWSER: 'true' };
-    // Over pipes, gh prints the one-time code and the page, then waits for GitHub to say yes.
+    // Over pipes, gh prints the one-time code ("code: XXXX-XXXX", or "code (XXXX-XXXX) copied" from 2.10x) and the page, then waits.
     const p = spawn(this.gh, ['auth', 'login', '--hostname', 'github.com', '--git-protocol', 'https', '--web', '--insecure-storage', '--skip-ssh-key'], { cwd: this.home(id), env, stdio: ['pipe', 'pipe', 'pipe'] });
     let out = '';
     const flow: Flow = { stop: () => p.kill() };
@@ -452,7 +452,7 @@ export class SignIns {
     const onData = (d: Buffer) => {
       out = (out + d.toString('utf8')).slice(-20_000);
       if (l.flows.github !== flow || l.github.pending?.code) return;
-      const code = /one-time code:\s*([A-Z0-9]{4}-[A-Z0-9]{4})/i.exec(out)?.[1];
+      const code = /one-time code(?::|\s*\()\s*([A-Z0-9]{4}-[A-Z0-9]{4})/i.exec(out)?.[1];
       if (!code) return;
       const url = /https:\/\/github\.com\/login\/device\S*/.exec(out)?.[0] ?? 'https://github.com/login/device';
       l.github = { status: 'busy', pending: { url, code } };

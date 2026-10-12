@@ -17,6 +17,8 @@ export function navigation(ctx: Ctx): Navigation {
     if (c.peer.floor === floor.id) return;
     const left = leave(c, at);
     Object.assign(c.peer, { floor: floor.id });
+    // Its building's floors first: the elevator and the tower outside are that building's.
+    ctx.sendFloors(c);
     ctx.sendTo(c, { t: 'floor.enter', peers: [...ctx.clients.values()].map((o) => o.peer), ...floorView(ctx, floor) });
     screensOf(ctx, c, floor);
     arrived(c, left);
@@ -30,15 +32,21 @@ export function navigation(ctx: Ctx): Navigation {
     if (c.peer.floor === ROOF) return;
     const left = leave(c);
     c.peer.floor = ROOF;
+    ctx.sendFloors(c);
     ctx.sendTo(c, { t: 'floor.enter', peers: [...ctx.clients.values()].map((o) => o.peer), ...roofView(ctx) });
     arrived(c, left);
     ctx.floorsChanged();
   };
 
-  /** Out to the lobby, where the elevator has nowhere to go: the building's last floor was taken off. */
-  const toLobby = (c: Client) => {
+  /**
+   * Out to the lobby, where the elevator has nowhere to go: the building's last floor was taken off, or
+   * it's `building`, which has none yet.
+   */
+  const toLobby = (c: Client, building?: string) => {
     const left = leave(c);
     delete c.peer.floor;
+    if (building) ctx.campus.place(c.id, building);
+    ctx.sendFloors(c);
     ctx.sendTo(c, { t: 'floor.enter', peers: [...ctx.clients.values()].map((o) => o.peer), ...floorView(ctx, undefined) });
     arrived(c, left);
   };
@@ -46,6 +54,8 @@ export function navigation(ctx: Ctx): Navigation {
   /** Off the floor (or the roof) `c` was on, to `at` on the next one, or into its elevator car. */
   const leave = (c: Client, at?: Spot) => {
     const was = ctx.floorOf(c);
+    // Which building they're leaving, for when they're somewhere that isn't one of its floors (see Campus.here).
+    ctx.hereOf(c);
     // Each feature lets go of what they had there (see FeatureHooks); some tell that floor once
     // they're off it, in arrived.
     const after = features.map((f) => f.leaving?.(ctx, c, was)).filter((a) => typeof a === 'function');

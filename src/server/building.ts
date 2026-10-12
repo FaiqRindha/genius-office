@@ -9,6 +9,8 @@ import { gitlabUrl } from './gitlab.js';
 import { whyGitLabCloneFailed, type GitLabFloorSource } from './gitlab-projects.js';
 import { checkoutAt, cloneHere, listRepos, originRepo, tildify, untildify, unwritable, within } from './building-git.js';
 
+import type { GhAs } from './signins.js';
+
 export { originRepo, tildify } from './building-git.js';
 
 /** A floor as floors.json keeps it. */
@@ -25,6 +27,8 @@ export interface FloorDef {
   palette: number;
   addedBy: string;
   addedAt: number;
+  /** The account whose building it's in (see campus.ts); none for the office's own building. */
+  owner?: string;
 }
 
 /** A projects folder picked in ⚙️ Settings (or with --projects), as projects-folder.json keeps it. */
@@ -51,13 +55,14 @@ interface Pending {
   empty: boolean;
   /** A GitLab project is cloned with git and its adder's credentials, not the office's gh. */
   git?: CloneRunOptions['git'];
+  /** Whose GitHub sign-in it's cloned with (see SignIns.ghAs); the office machine's own when missing. */
+  env?: Record<string, string>;
 }
 
 /** A clone under way, as cloning.json keeps it for the next office to pick up (see resumeClones). */
 interface SavedClone extends FloorDef {
   pid: number;
   log: string;
-  owner?: string;
   empty?: boolean;
 }
 
@@ -92,7 +97,8 @@ export class Building {
   private logsDir: string;
   /** Hears when a clone gets further along. */
   private cloneChanged?: () => void;
-  private repoCache?: { at: number; repos: Promise<RepoChoice[]> };
+  /** The repositories each GitHub sign-in can see, by its key ('' for the office machine's own). */
+  private repoCache = new Map<string, { at: number; repos: Promise<RepoChoice[]> }>();
   /** The checkout the office was started in (see ensureLocal), and the repository it's a checkout of. */
   private local?: { dir: string; repo?: string };
   /** The floor that checkout is, while it is one. */
@@ -198,7 +204,7 @@ export class Building {
         dropLog(s.log);
         continue;
       }
-      const def = { ...this.newDef(s.name, repo, s.dir, s.addedBy), ...(gitlab ? { gitlab } : {}) };
+      const def = { ...this.newDef(s.name, repo, s.dir, s.addedBy, s.owner), ...(gitlab ? { gitlab } : {}) };
       const pending: Pending = { def, owner: s.owner, empty: !!s.empty };
       const git = gitlab ? { url: gitlab, env: {}, host: new URL(gitlab).host } : undefined;
       const run = CloneRun.adopt(s.pid, s.log, { ...this.opts.clone, git, changed: () => this.cloneChanged?.() });
@@ -292,12 +298,13 @@ export class Building {
    * checkout that's already where the clone would go is used as it is. `account` (whoever's adding it)
    * can stop the clone, as admins can.
    */
-  async add(input: string, by: string, started: (def: FloorDef) => void, account?: string): Promise<FloorDef | string> {
+  async add(input: string, by: string, started: (def: FloorDef) => void, account?: string, as?: GhAs): Promise<FloorDef | string> {
     const wanted = normalizeRepo(input);
     if (!wanted) return 'Pick a repository, or type it as owner/name';
     if (this.defs.some((d) => sameRepo(d.repo, wanted))) return `${wanted} already has a floor`;
     if (this.cloning.has(wanted.toLowerCase())) return `${wanted} is already being cloned`;
-    if (this.defs.length + this.cloning.size >= MAX_FLOORS) return `The building is full (${MAX_FLOORS} floors)`;
+    // Each account's building is as tall as MAX_FLOORS; floors nobody owns are the office's own building.
+    if ([...this.defs, ...this.pending()].filter((d) => d.owner === account).length >= MAX_FLOORS) return `The building is full (${MAX_FLOORS} floors)`;
     // The office's own checkout, taken off before: it moves back in where it is, not into a second clone.
     const home = this.local;
     if (this.localOff && home && sameRepo(home.repo, wanted) && existsSync(home.dir)) {
@@ -313,7 +320,7 @@ export class Building {
     let repo: string;
     let empty = false;
     try {
-      const view = JSON.parse(await gh(['repo', 'view', wanted, '--json', 'nameWithOwner,isEmpty'], this.dataDir, 30_000)) as { nameWithOwner?: string; isEmpty?: boolean };
+      const view = JSON.parse(await gh(['repo', 'view', wanted, '--json', 'nameWithOwner,isEmpty'], this.dataDir, 30_000, as?.env)) as { nameWithOwner?: string; isEmpty?: boolean };
       repo = normalizeRepo(view.nameWithOwner) ?? wanted;
       empty = view.isEmpty === true;
     } catch (err) {
@@ -322,7 +329,7 @@ export class Building {
     if (this.defs.some((d) => sameRepo(d.repo, repo))) return `${repo} already has a floor`;
     if (this.cloning.has(repo.toLowerCase())) return `${repo} is already being cloned`;
     const [owner, name] = repo.split('/');
-    return this.begin(this.newDef(name, repo, path.join(this.projectsDir, owner, name), by), { owner: account, empty }, started);
+    return this.begin(this.newDef(name, repo, path.join(this.projectsDir, owner, name), by, account), { owner: account, empty, env: as?.env }, started);
   }
 
   /**
@@ -333,9 +340,10 @@ export class Building {
   async addGitLab(src: GitLabFloorSource, env: Record<string, string>, by: string, started: (def: FloorDef) => void, account?: string): Promise<FloorDef | string> {
     if (this.defs.some((d) => sameFloor(d, src.url))) return `${src.path} already has a floor`;
     if (this.cloning.has(src.url.toLowerCase())) return `${src.path} is already being cloned`;
-    if (this.defs.length + this.cloning.size >= MAX_FLOORS) return `The building is full (${MAX_FLOORS} floors)`;
+    // In the adder's own building, as a GitHub floor is (see add).
+    if ([...this.defs, ...this.pending()].filter((d) => d.owner === account).length >= MAX_FLOORS) return `The building is full (${MAX_FLOORS} floors)`;
     const dest = path.join(this.projectsDir, src.host.replace(/:/g, '_'), ...src.path.split('/'));
-    const def: FloorDef = { ...this.newDef(src.name, undefined, dest, by), gitlab: src.url, ...(account ? { gitlabAccount: account } : {}) };
+    const def: FloorDef = { ...this.newDef(src.name, undefined, dest, by, account), gitlab: src.url, ...(account ? { gitlabAccount: account } : {}) };
     return this.begin(def, { owner: account, empty: src.empty, git: { url: src.cloneUrl, env, host: src.host } }, started);
   }
 
@@ -378,7 +386,7 @@ export class Building {
     } catch (err) {
       return `Couldn't make ${this.logsDir}: ${(err as Error).message}`;
     }
-    const run = await CloneRun.start(repo, dest, path.join(this.logsDir, `${repo.replace(/[^A-Za-z0-9.-]+/g, '__')}.log`), { ...this.opts.clone, git: p.git, changed: () => this.cloneChanged?.() });
+    const run = await CloneRun.start(repo, dest, path.join(this.logsDir, `${repo.replace(/[^A-Za-z0-9.-]+/g, '__')}.log`), { ...this.opts.clone, git: p.git, env: p.env, changed: () => this.cloneChanged?.() });
     if (typeof run === 'string') return run;
     p.run = run;
     this.saveClones();
@@ -400,19 +408,20 @@ export class Building {
   }
 
   /** Repositories the office's `gh` login can clone, most recently pushed first. */
-  async repos(refresh = false): Promise<RepoChoice[]> {
-    const cached = this.repoCache;
+  async repos(refresh = false, as?: GhAs): Promise<RepoChoice[]> {
+    const key = as?.key ?? '';
+    const cached = this.repoCache.get(key);
     if (cached && !refresh && Date.now() - cached.at < REPOS_TTL_MS) return cached.repos;
-    const repos = listRepos(this.dataDir);
-    this.repoCache = { at: Date.now(), repos };
+    const repos = listRepos(this.dataDir, as?.env);
+    this.repoCache.set(key, { at: Date.now(), repos });
     // A failure is worth asking again next time, not keeping for five minutes.
     repos.catch(() => {
-      if (this.repoCache?.repos === repos) this.repoCache = undefined;
+      if (this.repoCache.get(key)?.repos === repos) this.repoCache.delete(key);
     });
     return repos;
   }
 
-  private newDef(name: string, repo: string | undefined, dir: string, by: string): FloorDef {
+  private newDef(name: string, repo: string | undefined, dir: string, by: string, owner?: string): FloorDef {
     const taken = new Set([...this.defs, ...this.pending()].map((d) => d.id));
     const base = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 32) || 'floor';
     let id = base;
@@ -421,7 +430,7 @@ export class Building {
     const used = new Set([...this.defs, ...this.pending()].map((d) => d.palette));
     const free = FLOOR_PALETTES.findIndex((_, i) => !used.has(i));
     const palette = free >= 0 ? free : (this.defs.length + this.cloning.size) % FLOOR_PALETTES.length;
-    return { id, name, repo, dir, palette, addedBy: by, addedAt: Date.now() };
+    return { id, name, repo, dir, palette, addedBy: by, addedAt: Date.now(), ...(owner ? { owner } : {}) };
   }
 
   private load() {
@@ -441,6 +450,7 @@ export class Building {
           palette: Number.isInteger(s.palette) && (s.palette as number) >= 0 ? (s.palette as number) : 0,
           addedBy: typeof s.addedBy === 'string' ? s.addedBy : '?',
           addedAt: typeof s.addedAt === 'number' ? s.addedAt : Date.now(),
+          ...(typeof s.owner === 'string' && s.owner ? { owner: s.owner } : {}),
         });
       }
     } catch (err) {

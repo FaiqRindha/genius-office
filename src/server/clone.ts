@@ -67,6 +67,8 @@ export interface CloneEnd {
 }
 
 export interface CloneRunOptions {
+  /** Whose GitHub sign-in it clones with (see SignIns.ghAs); the office machine's own when missing. */
+  env?: Record<string, string>;
   /** Hears about new progress, at most once a tick. */
   changed?: () => void;
   /**
@@ -119,7 +121,8 @@ export class CloneRun {
           stdio: ['ignore', fd, fd],
           windowsHide: true,
           // No prompts: nobody would see them. What would have asked says so and fails instead.
-          env: { ...(git?.env ?? process.env), GIT_TERMINAL_PROMPT: '0', GH_PROMPT_DISABLED: '1' },
+          // A GitLab's clone runs with its adder's GitLab token; a GitHub one with their own gh (or the office's).
+          env: { ...(git?.env ?? opts.env ?? process.env), GIT_TERMINAL_PROMPT: '0', GH_PROMPT_DISABLED: '1' },
         });
       } finally {
         closeSync(fd);

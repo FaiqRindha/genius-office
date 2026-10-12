@@ -19,24 +19,25 @@ import { mapNews } from './handlers/settings.js';
  */
 export function onConnection(ctx: Ctx, ws: WebSocket, url: URL, session: Session) {
   const { cfg, accounts, clients, chat, building, floors, maps, team, upgrader, ledger, webhook, machine, sky, themes, prompts, leaveOnMerge, signins } = ctx;
-  const { sendTo, broadcast, floorInfos, floorsChanged, arrivalFloor, meOf, accountsChanged, limitsOf } = ctx;
+  const { sendTo, broadcast, floorsChanged, arrivalFloor, meOf, accountsChanged, limitsOf } = ctx;
   const id = randomBytes(5).toString('hex');
+  const account = session.account;
+  const me = meOf(account?.id);
   // Back on the floor they were on before a reload, a restart or closing the tab, else the first floor.
   const wanted = url.searchParams.get('floor');
   // Their floor's gone since (taken off the building, or its checkout deleted): up to the roof instead.
   const gone = !!wanted && wanted !== ROOF && !floors.has(wanted);
   // Up on the roof, as long as there's a building under it.
   const onRoof = (wanted === ROOF || gone) && floors.size > 0;
-  const floor = onRoof ? undefined : arrivalFloor(wanted);
+  // Only into a building their card opens (see campus.ts).
+  const floor = onRoof ? undefined : arrivalFloor(wanted, { accountId: account?.id, admin: me.admin });
   // Back where they were standing on it too; anywhere else, they arrive by elevator.
   const back = !gone && wanted !== null && (onRoof || floor?.id === wanted);
   const spot = (back && spotFrom(url.searchParams)) || { ...elevatorSpot(), y: 0, rotY: 0 };
-  const account = session.account;
   // An account's name is its own; on the shared password people pick one.
   const name = account?.name ?? (str(url.searchParams.get('name'), 24).trim() || `Guest ${id.slice(0, 3)}`);
   const colorParam = url.searchParams.get('color') ?? '';
   const intParam = (k: string) => (url.searchParams.get(k) ? Number(url.searchParams.get(k)) : undefined);
-  const me = meOf(account?.id);
   const client = newClient(id, ws, { accountId: account?.id, admin: me.admin }, {
     id,
     name,
@@ -66,7 +67,7 @@ export function onConnection(ctx: Ctx, ws: WebSocket, url: URL, session: Session
     t: 'welcome',
     you: id,
     peers: [...clients.values()].map((c) => c.peer),
-    floors: floorInfos(),
+    floors: ctx.floorsFor(client),
     projectsDir: building.projectsDirState(),
     ice: cfg.iceServers,
     chat: chat.recent(50),
@@ -85,6 +86,8 @@ export function onConnection(ctx: Ctx, ws: WebSocket, url: URL, session: Session
     leaveOnMerge: leaveOnMerge.state(),
     ...(onRoof ? roofView(ctx) : floorView(ctx, floor)),
   });
+  // What they see of the campus.
+  ctx.sendFloors(client);
   screensOf(ctx, client, floor);
   broadcast({ t: 'peer.join', peer: client.peer }, id);
   if (account) accountsChanged(); // now online
@@ -112,6 +115,7 @@ export function onConnection(ctx: Ctx, ws: WebSocket, url: URL, session: Session
   });
   ws.on('close', () => {
     clients.delete(id);
+    ctx.campus.forget(id);
     // Each feature lets go of what they had (see FeatureHooks), then of what they had on each floor.
     for (const f of features) f.closed?.(ctx, client);
     for (const floor of floors.values()) for (const f of features) f.closedOn?.(ctx, client, floor);

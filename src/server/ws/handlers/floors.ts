@@ -1,6 +1,7 @@
 // The building's floors: riding the elevator between them and up to the roof, and adding and taking
 // off floors.
-import type { FloorClientMsg } from '../../../shared/protocol.js';
+import { normalizeRepo, sameRepo } from '../../../shared/floors.js';
+import { MAIN_BUILDING, type FloorClientMsg } from '../../../shared/protocol.js';
 import { ROOF } from '../../../shared/rooftop.js';
 import { arrivalSpot, str } from '../../office/input.js';
 import type { HandlerMap, ViewPieces } from './types.js';
@@ -16,36 +17,60 @@ export const floorHandlers = {
     }
     const floor = ctx.floors.get(str(msg.floor, 64));
     if (!floor) ctx.warn(c, ctx.building.pending().some((d) => d.id === msg.floor) ? "That floor is still being cloned — it'll be ready in a moment" : 'No such floor');
+    // Into someone else's building only on their guest list (see campus.ts).
+    else if (!ctx.campus.mayEnter(c, ctx.campus.of(floor.def))) ctx.warn(c, "That floor's in someone else's building, and your card doesn't open it");
     else ctx.goToFloor(c, floor, arrivalSpot(msg.at));
   },
   'floor.repos'(ctx, c, msg) {
-    void ctx.building.repos(msg.refresh === true).then(
-      (repos) => ctx.sendTo(c, { t: 'floor.repos', repos }),
-      (err: Error) => ctx.sendTo(c, { t: 'floor.repos', repos: [], error: `Couldn't list your repositories with gh: ${err.message}` }),
+    // The repositories your own GitHub sign-in can see (the office machine's, on the shared password).
+    ctx.withGitHub(
+      c,
+      (as) =>
+        void ctx.building.repos(msg.refresh === true, as).then(
+          (repos) => ctx.sendTo(c, { t: 'floor.repos', repos }),
+          (err: Error) => ctx.sendTo(c, { t: 'floor.repos', repos: [], error: `Couldn't list your repositories with gh: ${err.message}` }),
+        ),
+      (why) => ctx.sendTo(c, { t: 'floor.repos', repos: [], error: why }),
+      // GitHub's repositories, whichever floor you're on (a GitLab one's are its own: see gitlab.ts).
+      null,
     );
   },
   'floor.add'(ctx, c, msg) {
     const who = c.peer.name;
     const repo = str(msg.repo, 200);
-    void ctx.building
-      .add(
-        repo,
-        who,
-        (def) => {
+    // A repository is a floor in one building: say whose, and how to get in there instead.
+    const wanted = normalizeRepo(repo);
+    const taken = wanted && [...ctx.building.list(), ...ctx.building.pending()].find((d) => sameRepo(d.repo, wanted));
+    if (taken) {
+      const b = ctx.campus.of(taken);
+      const owner = ctx.accounts.get(b)?.name ?? 'its owner';
+      const where = b === c.accountId ? 'your building' : b === MAIN_BUILDING ? "the office's own building" : `${owner}'s building`;
+      const how = b === c.accountId ? '' : ctx.campus.mayEnter(c, b) ? ': walk over and tap your ID card at its door' : `: ask ${owner} to put you on their guest list`;
+      return ctx.sendTo(c, { t: 'floor.added', repo, error: `${wanted} already has a floor in ${where}${how}` });
+    }
+    // Cloned with your own GitHub sign-in, so a private repository of yours comes down too.
+    const add = (as: Parameters<typeof ctx.building.add>[4]) =>
+      void ctx.building
+        .add(
+          repo,
+          who,
+          (def) => {
+            ctx.floorsChanged();
+            ctx.toastAll(`🛗 ${who} is adding a floor for ${def.repo ?? def.name}…`);
+          },
+          c.accountId,
+          as,
+        )
+        .then((r) => {
           ctx.floorsChanged();
-          ctx.toastAll(`🛗 ${who} is adding a floor for ${def.repo ?? def.name}…`);
-        },
-        c.accountId,
-      )
-      .then((r) => {
-        ctx.floorsChanged();
-        if (typeof r === 'string') return ctx.sendTo(c, { t: 'floor.added', repo, error: r });
-        const floor = ctx.openFloor(r);
-        if (!floor) return ctx.sendTo(c, { t: 'floor.added', repo, error: `Cloned ${r.repo}, but couldn't open its floor — see the office's log` });
-        console.log(`  ${who} added a floor for ${r.repo} (${r.dir})`);
-        ctx.toastAll(`🛗 New floor: ${r.name}, added by ${who}`);
-        ctx.sendTo(c, { t: 'floor.added', repo, floor: floor.id });
-      });
+          if (typeof r === 'string') return ctx.sendTo(c, { t: 'floor.added', repo, error: r });
+          const floor = ctx.openFloor(r);
+          if (!floor) return ctx.sendTo(c, { t: 'floor.added', repo, error: `Cloned ${r.repo}, but couldn't open its floor — see the office's log` });
+          console.log(`  ${who} added a floor for ${r.repo} (${r.dir})`);
+          ctx.toastAll(`🛗 New floor: ${r.name}, added by ${who}`);
+          ctx.sendTo(c, { t: 'floor.added', repo, floor: floor.id });
+        });
+    ctx.withGitHub(c, add, (why) => ctx.sendTo(c, { t: 'floor.added', repo, error: why }), null);
   },
   'floor.cancel'(ctx, c, msg) {
     const who = c.peer.name;
@@ -58,9 +83,10 @@ export const floorHandlers = {
   },
   'floor.remove'(ctx, c, msg) {
     const who = c.peer.name;
-    // Everyone's workers on it stop: admins do it.
-    if (!ctx.meOf(c.accountId).admin) return ctx.warn(c, 'Only admins can take a floor off the building');
     const id = str(msg.floor, 64);
+    // Everyone's workers on it stop: admins do it, or the owner of the building it's in.
+    const def = ctx.building.list().find((d) => d.id === id);
+    if (!ctx.meOf(c.accountId).admin && !(def && c.accountId && ctx.campus.of(def) === c.accountId)) return ctx.warn(c, 'Only admins, and the owner of its building, can take a floor off it');
     const r = ctx.building.remove(id, who);
     if (typeof r === 'string') return ctx.warn(c, r);
     console.log(`  ${who} took the ${r.name} floor off the building (${r.dir} stays where it is)`);

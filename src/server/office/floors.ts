@@ -1,12 +1,13 @@
 import { existsSync } from 'node:fs';
 import { WebSocket } from 'ws';
 import type { FloorDef } from '../building.js';
+import type { Who } from '../campus.js';
 import { Floor, type FloorContext } from '../floor.js';
 import { withGitLab } from '../gitlab.js';
 import { GitLabBoards } from '../gitlab-boards.js';
 import { setGitLabFloor } from '../forge.js';
 import { ROOF } from '../../shared/rooftop.js';
-import type { FloorInfo, ServerMsg } from '../../shared/protocol.js';
+import { MAIN_BUILDING, type FloorInfo, type ServerMsg } from '../../shared/protocol.js';
 import type { Ctx, FloorHelpers, FloorsOpen } from './context.js';
 import { SLOW_CLIENT_BYTES, type Client } from './client.js';
 
@@ -18,52 +19,91 @@ export function floorHelpers(ctx: Ctx): FloorHelpers {
     for (const f of ctx.floors.values()) if (f.workers.get(workerId)) return f;
     return undefined;
   };
-  const floorInfos = (): FloorInfo[] => [
-    ...[...ctx.floors.values()].map((f) => ({ ...f.info(), ...(ctx.building.isLocal(f.id) ? { local: true } : {}) })),
-    ...ctx.building.pending().map((d) => ({ id: d.id, name: d.name, repo: d.repo, gitlab: d.gitlab, dir: d.dir, palette: d.palette, addedBy: d.addedBy, addedAt: d.addedAt, cloning: true, clone: ctx.building.cloneProgress(d.id), workers: 0, busy: 0, waiting: 0, people: 0, wing: 0 })),
-  ];
+  /** A floor coming off the building, left out of every list from now on (see closeFloor). */
+  let closing: string | undefined;
+  const floorInfos = (building?: string): FloorInfo[] => {
+    const inIt = (def: FloorDef) => def.id !== closing && (building === undefined || ctx.campus.of(def) === building);
+    return [
+      ...[...ctx.floors.values()].filter((f) => inIt(f.def)).map((f) => ({ ...f.info(), ...(ctx.building.isLocal(f.id) ? { local: true } : {}) })),
+      ...ctx.building
+        .pending()
+        .filter(inIt)
+        .map((d) => ({ id: d.id, name: d.name, repo: d.repo, gitlab: d.gitlab, dir: d.dir, palette: d.palette, addedBy: d.addedBy, addedAt: d.addedAt, cloning: true, clone: ctx.building.cloneProgress(d.id), workers: 0, busy: 0, waiting: 0, people: 0, wing: 0 })),
+    ];
+  };
+  const hereOf = (c: Client) => ctx.campus.here(c.id, c, floorOf(c)?.def);
+  // What each connection was last sent, so nobody's sent the same list twice.
+  const sent = new WeakMap<Client, { floors: string; campus: string }>();
+  const sendFloors = (c: Client, lists = new Map<string, FloorInfo[]>()) => {
+    const here = hereOf(c);
+    const floors = lists.get(here) ?? floorInfos(here);
+    lists.set(here, floors);
+    const defs = [...ctx.building.list(), ...ctx.building.pending()].filter((d) => d.id !== closing);
+    const campus = ctx.campus.state(c, here, defs, [...ctx.floors.values()].map((f) => f.def).filter((d) => d.id !== closing));
+    const was = sent.get(c);
+    const now = { floors: JSON.stringify(floors), campus: JSON.stringify(campus) };
+    sent.set(c, now);
+    if (now.floors !== was?.floors) ctx.sendTo(c, { t: 'floors', floors });
+    if (now.campus !== was?.campus) ctx.sendTo(c, { t: 'campus', state: campus });
+  };
+  /** `c`'s building's floors, for its welcome: counted as sent. */
+  const floorsFor = (c: Client): FloorInfo[] => {
+    const floors = floorInfos(hereOf(c));
+    sent.set(c, { floors: JSON.stringify(floors), campus: sent.get(c)?.campus ?? '' });
+    return floors;
+  };
+  /** Everyone's lists, each of their own building. */
+  const sendAll = () => {
+    const lists = new Map<string, FloorInfo[]>();
+    for (const c of ctx.clients.values()) if (!c.out) sendFloors(c, lists);
+  };
   // The elevator's counts change with every worker update; tell everyone at most a few times a second.
-  let floorsSent = '';
   let floorsTimer: NodeJS.Timeout | undefined;
   const floorsChanged = () => {
     floorsTimer ??= setTimeout(() => {
       floorsTimer = undefined;
-      const list = floorInfos();
-      const json = JSON.stringify(list);
-      if (json === floorsSent) return;
-      floorsSent = json;
-      ctx.broadcast({ t: 'floors', floors: list });
+      sendAll();
     }, 250);
   };
-  /** Where someone arriving goes: the floor they asked for, else the first one there is. */
-  const arrivalFloor = (wanted: string | null): Floor | undefined => (wanted && ctx.floors.get(wanted)) || ctx.floors.values().next().value;
+  const arrivalFloor = (wanted: string | null, who: Who, except?: Floor): Floor | undefined => {
+    const open = [...ctx.floors.values()].filter((f) => f !== except && ctx.campus.mayEnter(who, ctx.campus.of(f.def)));
+    const inside = (b: string) => open.filter((f) => ctx.campus.of(f.def) === b);
+    // Someone with an account comes in at home: their own building, or its lobby while it has no
+    // floors yet (the elevator asks for its first). Anyone else's is a walk and a card away.
+    const own = who.accountId && ctx.accounts.get(who.accountId) ? who.accountId : undefined;
+    if (own) return inside(own).find((f) => f.id === wanted) ?? inside(own)[0];
+    return open.find((f) => f.id === wanted) ?? inside(MAIN_BUILDING)[0] ?? open[0];
+  };
 
   /**
    * Takes `floor` off the building (already out of floors.json): everyone on it rides the elevator to
-   * the next floor, or out to the lobby if it was the last (the roof goes with it), and its workers stop.
+   * another floor of the same building, or out to its lobby if it was the last, and its workers stop.
    */
   const closeFloor = (floor: Floor, who: string) => {
     const name = floor.def.name;
-    const next = [...ctx.floors.values()].find((f) => f !== floor);
-    // The list without it first, so nobody arrives somewhere (the lobby's panel) that still shows it.
-    const list = floorInfos().filter((f) => f.id !== floor.id);
-    floorsSent = JSON.stringify(list);
-    ctx.broadcast({ t: 'floors', floors: list });
+    const building = ctx.campus.of(floor.def);
+    // The lists without it first, so nobody arrives somewhere (the lobby's panel) that still shows it.
+    closing = floor.id;
+    sendAll();
+    const next = [...ctx.floors.values()].find((f) => f !== floor && ctx.campus.of(f.def) === building);
+    // The roof stays up as long as there's a floor anywhere under it.
+    const roofless = ![...ctx.floors.values()].some((f) => f !== floor);
     for (const c of ctx.clients.values()) {
-      if (c.peer.floor === floor.id || (!next && c.peer.floor === ROOF)) {
+      if (c.peer.floor === floor.id || (roofless && c.peer.floor === ROOF)) {
         if (next) ctx.goToFloor(c, next);
         else ctx.toLobby(c);
         ctx.sendTo(c, { t: 'toast', text: next ? `🛗 ${who} took ${name} off the building, so you rode the elevator to ${next.def.name}` : `🛗 ${who} took ${name}, the last floor, off the building`, level: 'warn' });
-      } else ctx.sendTo(c, { t: 'toast', text: `🛗 ${who} took ${name} off the building`, level: 'info' });
+      } else if (hereOf(c) === building) ctx.sendTo(c, { t: 'toast', text: `🛗 ${who} took ${name} off the building`, level: 'info' });
     }
     ctx.floors.delete(floor.id);
+    closing = undefined;
     floor.shutdown();
     floorsChanged();
     // Its workers made room under the worker limit.
     ctx.pumpQueues();
   };
 
-  return { floorOf, workerFloor, floorInfos, floorsChanged, cancelFloorsChanged: () => clearTimeout(floorsTimer), arrivalFloor, closeFloor };
+  return { floorOf, workerFloor, floorInfos, floorsChanged, cancelFloorsChanged: () => clearTimeout(floorsTimer), arrivalFloor, hereOf, floorsFor, sendFloors: (c) => sendFloors(c), closeFloor };
 }
 
 /**

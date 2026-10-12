@@ -216,6 +216,20 @@ export function installTravel(ctx: Ctx, core: CoreState, parts: TravelParts) {
     setTimeout(() => net.send({ t: 'floor.go', floor: floorId, at: standingAt(floorId) }), 170);
   }
 
+  /**
+   * In through another building's door (see features/campus): no lights going down, you just walk
+   * in, and once its floor's here you're standing `at` on it, which is where you were in the world.
+   */
+  function walkInto(floorId: string, at: Arrival) {
+    if (core.trip) return;
+    stopForTrip();
+    parts.walking.stopWalkingTo();
+    player.enabled = false;
+    player.clearKeys();
+    core.trip = { floor: floorId, how: 'switch', timer: window.setTimeout(tripFailed, 10_000), at };
+    net.send({ t: 'floor.go', floor: floorId, at });
+  }
+
   /** Through the ceiling up the ladder, or through the floor down one: the lights dip as you pass. */
   function travel(floorId: string, how: Grip, at: Arrival) {
     if (core.trip) return;
@@ -307,6 +321,8 @@ export function installTravel(ctx: Ctx, core: CoreState, parts: TravelParts) {
     if (core.trip) {
       // Down to the garage: into the car at the bottom of the shaft, now that the street is where this floor has it.
       if (core.trip.garage && store.floor) placeInCar(player.pos, true);
+      // In through another building's door: where you were in the world, on its floor's map.
+      if (core.trip.at) parts.place.placeAt(core.trip.at);
       clearTimeout(core.trip.timer);
       core.trip = null;
     }
@@ -339,5 +355,5 @@ export function installTravel(ctx: Ctx, core: CoreState, parts: TravelParts) {
     doorsOpen();
   }
 
-  return { syncStack, takenAway, showElevator, lift, ride, switchFloor, travel, leaveRoofFor, setPlace, arrive, pending };
+  return { syncStack, takenAway, showElevator, lift, ride, switchFloor, travel, walkInto, leaveRoofFor, setPlace, arrive, pending };
 }

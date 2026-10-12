@@ -22,5 +22,5 @@ function search(ctx: Ctx, q: string, floor: Floor | undefined): SearchResults {
 }
 
 export const searchRoutes = {
-  search: { method: 'GET', path: '/api/search', auth: 'session', handle: (ctx, { res, url }) => send(res, 200, search(ctx, url.searchParams.get('q') ?? '', floorParam(ctx, url))) },
+  search: { method: 'GET', path: '/api/search', auth: 'session', handle: (ctx, { res, url, session }) => send(res, 200, search(ctx, url.searchParams.get('q') ?? '', floorParam(ctx, url, session))) },
 } satisfies Record<string, Route>;

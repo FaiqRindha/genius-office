@@ -58,13 +58,13 @@ export function gates(ctx: Ctx): Gates {
     });
   };
   /** Runs `go` with how the office acts on GitHub for `c`: as them, or as itself (no account, or an admin's choice). */
-  const withGitHub = (c: Client, go: (as: GhAs | undefined) => void, refused?: (why: string) => void) =>
+  const withGitHub = (c: Client, go: (as: GhAs | undefined) => void, refused?: (why: string) => void, floor: Floor | null = ctx.floorOf(c) ?? null) =>
     withSignIn(
       c,
       // On a GitLab floor it's their GitLab sign-in, which actAs asks for.
-      ctx.floorOf(c)?.def.gitlab ? undefined : 'github',
+      floor?.def.gitlab ? undefined : 'github',
       () => {
-        const as = actAs(c.accountId, ctx.floorOf(c));
+        const as = actAs(c.accountId, floor ?? undefined);
         if (typeof as !== 'string') return go(as);
         if (refused) refused(as);
         else ctx.warn(c, as);

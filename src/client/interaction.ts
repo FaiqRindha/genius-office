@@ -39,6 +39,8 @@ export function interactionAvailable(it: Interactable | null, key: DeskKey, stat
   }
 
   if (state.note && it.kind === 'issues') return key === 'E' || key === 'O';
+  // A card reader: E taps your card, L opens your building's guest list (see features/campus).
+  if (it.kind === 'reader') return key === 'E' || key === 'L';
   if (key !== 'E') return false;
 
   if (it.kind === 'decor') return !!it.decorId;

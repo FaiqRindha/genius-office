@@ -8,7 +8,7 @@ import type { FeatureHooks, HandlerMap } from './types.js';
 
 export const changesHandlers = {
   'changes.watch'(ctx, c, msg) {
-    const w = workerOf(ctx, msg.workerId);
+    const w = workerOf(ctx, msg.workerId, c);
     if (w) w.floor.changes.watch(w.wid, c.id, repoOf(msg.repo));
   },
   'changes.unwatch'(ctx, c, msg) {
@@ -20,7 +20,7 @@ export const changesHandlers = {
     const workerId = str(msg.workerId, 32);
     const file = str(msg.path, 4096);
     const repo = repoOf(msg.repo);
-    const floor = ctx.workerFloor(workerId);
+    const floor = workerOf(ctx, workerId, c)?.floor;
     if (!floor) {
       ctx.sendTo(c, { t: 'changes.diff', workerId, repo, path: file, diff: '', truncated: false, error: 'No such worker' });
       return;
@@ -32,19 +32,19 @@ export const changesHandlers = {
   },
   'changes.commit'(ctx, c, msg) {
     const who = c.peer.name;
-    const w = workerOf(ctx, msg.workerId);
+    const w = workerOf(ctx, msg.workerId, c);
     // Committed as whoever pressed it: their GitHub name and email, once they've signed in to it.
     const env = c.accountId ? ctx.signins.apply(c.accountId, childEnv(), [], 'github') : undefined;
     if (w) void w.floor.changes.commit(w.wid, str(msg.message, 5000), who, env, repoOf(msg.repo)).then((err) => ctx.warn(c, err));
   },
   'changes.discard'(ctx, c, msg) {
     const who = c.peer.name;
-    const w = workerOf(ctx, msg.workerId);
+    const w = workerOf(ctx, msg.workerId, c);
     if (w) void w.floor.changes.discard(w.wid, typeof msg.path === 'string' ? str(msg.path, 4096) : undefined, who, repoOf(msg.repo)).then((err) => ctx.warn(c, err));
   },
   'changes.pr'(ctx, c, msg) {
     const who = c.peer.name;
-    const w = workerOf(ctx, msg.workerId);
+    const w = workerOf(ctx, msg.workerId, c);
     if (w) ctx.withGitHub(c, (as) => void w.floor.changes.pullRequest(w.wid, str(msg.title, 300), str(msg.body, 20000), who, as?.env, repoOf(msg.repo)).then((err) => ctx.warn(c, err)));
   },
 } satisfies HandlerMap<ChangesClientMsg>;

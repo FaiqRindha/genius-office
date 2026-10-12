@@ -30,7 +30,9 @@ export const workerHandlers = {
     // Other floors' projects to work in too, each in a worktree of its own.
     const repos: RepoSource[] = [];
     for (const id of Array.isArray(msg.repos) ? [...new Set(msg.repos.slice(0, MAX_REPOS + 1).map((x) => str(x, 64)))] : []) {
-      const other = ctx.floors.get(id);
+      const found = ctx.floors.get(id);
+      // Only projects in buildings your card opens.
+      const other = found && ctx.campus.mayEnter(c, ctx.campus.of(found.def)) ? found : undefined;
       if (!other || other === floor) return ctx.warn(c, other ? "The worker's own floor's project is already in its workspace" : 'That project is no longer in the building');
       repos.push({ floor: other.id, name: other.def.name, repo: other.def.repo, dir: other.dir });
     }
@@ -48,12 +50,12 @@ export const workerHandlers = {
     ctx.withSignIn(c, kind === 'agent' ? ctx.claudeFor(msg.provider ?? floor.workers.officeDefault.provider) : undefined, () => (msg.worktree === true ? ctx.withFreshBase(c, fresh, hire) : hire()));
   },
   'worker.resume'(ctx, c, msg) {
-    const w = workerOf(ctx, msg.workerId);
+    const w = workerOf(ctx, msg.workerId, c);
     ctx.warn(c, w ? w.floor.workers.resume(w.wid) : 'No such worker');
   },
   'worker.kill'(ctx, c, msg) {
     const who = c.peer.name;
-    const w = workerOf(ctx, msg.workerId);
+    const w = workerOf(ctx, msg.workerId, c);
     if (!w) return;
     const { floor, info } = w;
     // The worker leaves right away; its worktree is dealt with after that, and the outcome follows.
@@ -65,7 +67,7 @@ export const workerHandlers = {
     });
   },
   'worker.worktree'(ctx, c, msg) {
-    const w = workerOf(ctx, msg.workerId);
+    const w = workerOf(ctx, msg.workerId, c);
     if (!w) return;
     void w.floor.workers.inspectWorktree(w.wid).then((state) => {
       if (state) ctx.sendTo(c, { t: 'worker.worktree', workerId: w.wid, state });
@@ -73,7 +75,7 @@ export const workerHandlers = {
   },
   'worker.rebuild'(ctx, c, msg) {
     const who = c.peer.name;
-    const w = workerOf(ctx, msg.workerId);
+    const w = workerOf(ctx, msg.workerId, c);
     if (!w) return;
     const { floor } = w;
     // With `all`, every worker on the floor whose worktree was deleted, this one first.
@@ -100,7 +102,7 @@ export const workerHandlers = {
   },
   'worker.attach'(ctx, c, msg) {
     const who = c.peer.name;
-    const w = workerOf(ctx, msg.workerId);
+    const w = workerOf(ctx, msg.workerId, c);
     const snap = w?.floor.workers.attach(w.wid, c.id, who);
     if (w && snap) {
       c.attached.add(w.wid);
@@ -115,7 +117,7 @@ export const workerHandlers = {
   },
   'worker.prompt'(ctx, c, msg) {
     const who = c.peer.name;
-    const w = workerOf(ctx, msg.workerId);
+    const w = workerOf(ctx, msg.workerId, c);
     const err = w ? w.floor.workers.prompt(w.wid, str(msg.prompt, 20000), who) : 'No such worker';
     ctx.warn(c, err);
     const issue = w?.info.kind === 'agent' ? issueNumber(msg.issue) : undefined;
@@ -139,7 +141,7 @@ export const workerHandlers = {
   },
   'worker.pr'(ctx, c, msg) {
     const who = c.peer.name;
-    const w = workerOf(ctx, msg.workerId);
+    const w = workerOf(ctx, msg.workerId, c);
     if (!w) return;
     const { floor, wid } = w;
     ctx.withGitHub(c, (as) => void floor.workers.openPr(wid, who, as).then((r) => {
@@ -171,7 +173,7 @@ export const workerHandlers = {
   },
   'term.typing'(ctx, c, msg) {
     // Everyone else in that terminal sees who's typing. A typist says so about once a second.
-    const w = workerOf(ctx, msg.workerId);
+    const w = workerOf(ctx, msg.workerId, c);
     const now = Date.now();
     if (!w || !c.attached.has(w.wid) || now - (c.typingAt.get(w.wid) ?? 0) < TYPING_GAP_MS) return;
     c.typingAt.set(w.wid, now);

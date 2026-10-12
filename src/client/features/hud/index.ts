@@ -25,7 +25,7 @@ import { openUpgrade } from '../../ui/upgrade';
 import { openWhiteboard } from '../whiteboard/ui';
 import { describeSky } from '../../world/sky';
 
-export type HudParts = Pick<Parts, 'worlds' | 'place' | 'travel' | 'you' | 'actions' | 'waiting' | 'meeting' | 'bookshelf' | 'hanging' | 'talk' | 'notifier'>;
+export type HudParts = Pick<Parts, 'worlds' | 'place' | 'travel' | 'you' | 'actions' | 'waiting' | 'meeting' | 'bookshelf' | 'hanging' | 'talk' | 'notifier' | 'campus'>;
 
 /** Listens for clicks on the HUD and the project, registers what the HUD follows (see mountHud), and binds Tab, H and F. */
 export function installHud(ctx: Ctx, core: CoreState, parts: HudParts) {
@@ -69,6 +69,7 @@ export function installHud(ctx: Ctx, core: CoreState, parts: HudParts) {
       // The office has its bookshelf for them; a map of its own may not.
       { id: 'docs', icon: '📚', label: 'Docs', section: 'Open', shown: () => !inOffice(), title: () => 'Read the project’s docs', run: parts.bookshelf.showBookshelf },
       { id: 'elevator', icon: '🛗', label: () => (inOffice() ? 'Elevator' : 'Floors'), section: 'Open', count: () => store.floors.reduce((n, f) => n + (f.id === store.floor ? 0 : f.waiting), 0), title: () => (inOffice() ? 'Ride to another project' : 'Go to another project, or add one'), run: travel.showElevator },
+      { id: 'map', icon: '🗺️', label: 'Map', section: 'Open', key: 'J', shown: () => inOffice(), title: () => 'The city from above: every building, whose it is, and you', run: () => parts.campus.showMap() },
       { id: 'roof', icon: '🍸', label: 'Rooftop bar', section: 'Open', shown: () => !core.upTop && inOffice() && builtFloors().length > 0, title: () => 'Ride the elevator up to the roof: a DJ, drinks and the city', run: () => travel.ride(ROOF) },
       // In voice, V is push to talk, so leaving is only from here.
       { id: 'voice', icon: '🎙️', label: () => (voice.inVoice ? 'Leave voice' : 'Join voice'), section: 'Together', key: () => (voice.inVoice ? undefined : 'V'), on: () => voice.inVoice, blocked: noMedia, run: () => void talk.toggleVoice() },

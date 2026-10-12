@@ -86,6 +86,12 @@ export class Accounts {
     return this.data.accounts.find((a) => a.id === id);
   }
 
+  /** Every account, in the order they were made. */
+  list(): readonly Account[] {
+    this.sync();
+    return this.data.accounts;
+  }
+
   byName(name: string): Account | undefined {
     this.sync();
     const n = cleanName(name);
