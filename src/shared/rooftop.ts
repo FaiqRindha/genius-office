@@ -10,6 +10,14 @@
 export const ROOF = '@roof';
 export const ROOF_NAME = 'Rooftop bar';
 
+/**
+ * Whether two people are in the same place: on the same floor, and up on the roof, the same
+ * building's (every building has a rooftop of its own; `roof` is whose, see campus).
+ */
+export function sameRoom(a: { floor?: string; roof?: string }, b: { floor?: string; roof?: string }): boolean {
+  return a.floor === b.floor && (a.floor !== ROOF || !a.roof || !b.roof || a.roof === b.roof);
+}
+
 /** What a drink comes in: a pint, a wine glass, a martini glass, a tall glass or a shot glass. */
 export type Glass = 'pint' | 'wine' | 'martini' | 'highball' | 'shot';
 

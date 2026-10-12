@@ -10,6 +10,7 @@ import { buildGarage, type NightParts } from '../../world/outside';
 import { buildExitStairs } from '../../world/office/balcony';
 import { exitDoor } from '../../world/office/shell';
 import { supercar } from '../cars/world';
+import { roofBar } from './roof';
 import type { Collider, Interactable } from '../../world/types';
 import type { Fixture, StreetSite } from '../../world/office/fixture';
 
@@ -114,6 +115,10 @@ export function officeBuilding(b: Pick<WorldBuilding, 'name' | 'floors'>, night:
   const d = FOOTPRINT.maxZ - FOOTPRINT.minZ;
   const top = (floors - 1) * STOREY + WALL_HEIGHT + SLAB;
   g.add(mesh(new THREE.BoxGeometry(w, SLAB, d), toon('#fffaf3'), 0, top - SLAB / 2, 0, false));
+  // Its rooftop bar up there (every building has one: the one you ride up to is the whole thing).
+  const bar = roofBar(night);
+  bar.position.y = top;
+  g.add(bar);
   const solid: Collider[] = [];
   const low = new THREE.Group();
   buildGarage(low, solid);

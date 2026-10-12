@@ -1,4 +1,5 @@
 import { test } from 'node:test';
+import { ROOF, sameRoom } from '../src/shared/rooftop.ts';
 import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
@@ -128,4 +129,16 @@ test('out on the grounds is the street, the steps and the district; in the room 
   assert.equal(isOutdoors(-19, 0, 6.5), true, 'the landing outside the exit door');
   assert.equal(isOutdoors(0, STREET_Y, 27), true, 'the street');
   assert.equal(isOutdoors(0, 0, 16), true, 'the balcony');
+});
+
+test("every building has a rooftop of its own: up there, you're only with the people on yours", () => {
+  const roof = (b?: string) => ({ floor: ROOF, roof: b });
+  assert.equal(sameRoom(roof(MAIN_BUILDING), roof(MAIN_BUILDING)), true);
+  assert.equal(sameRoom(roof(`${GITLAB_BUILDING}g/sub`), roof(MAIN_BUILDING)), false);
+  assert.equal(sameRoom(roof(`${GITLAB_BUILDING}g/sub`), roof(`${GITLAB_BUILDING}g/sub`)), true);
+  // Someone from before roofs were anyone's is on whichever you're on.
+  assert.equal(sameRoom(roof(), roof(MAIN_BUILDING)), true);
+  // A floor is a floor, whatever building someone came up from before.
+  assert.equal(sameRoom({ floor: 'app', roof: 'x' }, { floor: 'app', roof: 'y' }), true);
+  assert.equal(sameRoom({ floor: 'app' }, roof(MAIN_BUILDING)), false);
 });
