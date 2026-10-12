@@ -7,6 +7,10 @@ import { mergeByMaterial, mesh, textPlane, toon, toonUnique } from '../../world/
 import { buildTower, type Tower } from '../../world/tower';
 import type { Collider, Interactable } from '../../world/types';
 import { buildExitStairs } from '../../world/office/balcony';
+import { buildGarage } from '../../world/outside';
+import { CAR, CARS } from '../../../shared/garage';
+import { supercar } from '../cars/world';
+import { buildElevator } from '../../world/elevator';
 import type { Fixture, StreetSite } from '../../world/office/fixture';
 import { exitDoor, type Door } from '../../world/office/shell';
 
@@ -31,7 +35,7 @@ declare module '../../world/types' {
 export interface CampusWorld {
   /** Puts up every building but the one you're in, which stands at `here` in the world. */
   set(state: CampusState, here: { x: number; z: number }): void;
-  /** The readers, the building you're in's first. */
+  /** The readers and the other buildings' lifts, the building you're in's reader first. */
   readers: Interactable[];
   /** A reader lights up green (its door opens) or red (not with your card). */
   flash(building: string, ok: boolean): void;
@@ -42,7 +46,6 @@ export interface CampusWorld {
 }
 
 const G = STREET_Y;
-const GARAGE_H = -STREET_Y - SLAB;
 const IDLE = '#5aa9e6';
 const GREEN = '#3ddc84';
 const RED = '#ff4d4d';
@@ -119,9 +122,13 @@ interface Shell {
   signs: THREE.Group;
   reader: { group: THREE.Group; led: THREE.MeshToonMaterial };
   it: Interactable;
+  /** Its elevator's stop in its garage, which takes you up if your card opens the building. */
+  lift: Interactable;
   door: Door;
   /** What's in the way of it (its steps), from its middle, on its bottom floor. */
   solid: Collider[];
+  /** Where its lift's stop is, from its middle. */
+  liftAt: { x: number; z: number };
   /** Whose it is now (none while it's not put up), and where it stands. */
   building: string;
   at: { x: number; z: number };
@@ -201,10 +208,35 @@ export function buildCampus(ground: THREE.Group, colliders: Collider[], doors: D
     const d = FOOTPRINT.maxZ - FOOTPRINT.minZ;
     const roof = mesh(new THREE.BoxGeometry(w, SLAB, d), roofMat, 0, 0, 0, false);
     g.add(roof);
-    // Its garage, walled up, and the steps up its west side to its door.
-    g.add(mesh(new THREE.BoxGeometry(w, GARAGE_H, d), concrete, 0, G + GARAGE_H / 2, 0));
-    const stairs = new THREE.Group();
+    // Its garage, as the office's is (walls at the back and west, columns, lights), under the slab of
+    // its bottom floor, with its supercars parked in it; and the steps up its west side to its door.
     const solid: Collider[] = [];
+    const garage = new THREE.Group();
+    buildGarage(garage, solid);
+    g.add(garage);
+    g.add(mesh(new THREE.BoxGeometry(w, SLAB, d), concrete, 0, -SLAB / 2, 0, false));
+    const cars = new THREE.Group();
+    for (const def of CARS) {
+      // The one left out front is the office's own.
+      if (def.z > FOOTPRINT.maxZ) continue;
+      const car = supercar(def.kind, def.color).root;
+      car.position.set(def.x, G, def.z);
+      car.rotation.y = def.rotY;
+      cars.add(car);
+      const along = Math.abs(Math.cos(def.rotY)) > 0.5;
+      const [hx, hz] = along ? [CAR.width / 2, CAR.length / 2] : [CAR.length / 2, CAR.width / 2];
+      solid.push({ minX: def.x - hx, maxX: def.x + hx, minZ: def.z - hz, maxZ: def.z + hz, bottom: G, top: G + CAR.roof });
+    }
+    g.add(mergeByMaterial(cars));
+    // The elevator's stop at the back of the garage, its doors shut until your card calls it.
+    const elevator = buildElevator(-SLAB - STREET_Y);
+    elevator.setSign('🛗 Garage');
+    elevator.setFloor(G);
+    g.add(elevator.group);
+    solid.push(...elevator.colliders.map((c) => ({ ...c })));
+    const lift = elevator.interactable;
+    lift.kind = 'lift';
+    const stairs = new THREE.Group();
     buildExitStairs(stairs, solid);
     g.add(mergeByMaterial(stairs));
     const exit = exitDoor(unlit);
@@ -218,7 +250,7 @@ export function buildCampus(ground: THREE.Group, colliders: Collider[], doors: D
     const door = exit.door;
     door.locked = true;
     doors.push(door);
-    const shell: Shell = { group: g, tower, roof, signs, reader, it, door, solid, building: '', at: { x: 0, z: 0 }, key: '' };
+    const shell: Shell = { group: g, tower, roof, signs, reader, it, lift, door, solid, building: '', at: { x: 0, z: 0 }, key: '', liftAt: { x: lift.x, z: lift.z } };
     group.add(g);
     return (shells[i] = shell);
   };
@@ -232,6 +264,7 @@ export function buildCampus(ground: THREE.Group, colliders: Collider[], doors: D
     for (const s of shells) {
       if (!s.building) continue;
       Object.assign(s.it, { x: s.at.x + READER.x - here.x, z: s.at.z + READER.z - here.z, y: G - drop });
+      Object.assign(s.lift, { x: s.at.x + s.liftAt.x - here.x, z: s.at.z + s.liftAt.z - here.z, y: G - drop });
       Object.assign(s.door, { x: s.at.x + DOOR.x - here.x, z: s.at.z + DOOR.z - here.z, y: -drop });
     }
   };
@@ -272,6 +305,7 @@ export function buildCampus(ground: THREE.Group, colliders: Collider[], doors: D
       s.building = b.id;
       s.at = pos;
       s.it.building = b.id;
+      s.lift.building = b.id;
       s.group.visible = true;
       s.group.position.set(pos.x, 0, pos.z);
       const floors = Math.max(1, b.floors);
@@ -287,10 +321,11 @@ export function buildCampus(ground: THREE.Group, colliders: Collider[], doors: D
       }
       s.door.locked = !((openUntil.get(b.id) ?? 0) > performance.now());
       const top = (floors - 1) * STOREY + WALL_HEIGHT + SLAB;
-      add({ ...FOOTPRINT, bottom: G, top }, pos.x, pos.z);
+      // Its floors, over its open garage.
+      add({ ...FOOTPRINT, bottom: -SLAB, top }, pos.x, pos.z);
       for (const c of s.solid) add(c, pos.x, pos.z);
       add({ minX: READER.x - 0.1, maxX: READER.x + 0.1, minZ: READER.z - 0.1, maxZ: READER.z + 0.1, bottom: G, top: G + 1.5 }, pos.x, pos.z);
-      readers.push(s.it);
+      readers.push(s.it, s.lift);
       leds.set(b.id, s.reader.led);
     });
     for (let i = k; i < shells.length; i++) {

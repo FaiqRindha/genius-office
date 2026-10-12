@@ -2,7 +2,7 @@
  * The campus: a building per account in one world, each where it stands, and an ID card reader at
  * the foot of each one's exit steps. E at a reader taps your card: green and its door opens for you
  * (walk up and in, and you're on its bottom floor), red if your card doesn't open it. At your own
- * building's, L opens its guest list. Out on the grounds you see everyone else out there, whichever
+ * building's, L opens its guest list. Its elevator, down in its garage, takes you up the same way. Out on the grounds you see everyone else out there, whichever
  * building they came out of. The minimap in the corner follows you about; J (or a click on it) opens
  * the whole map.
  */
@@ -21,6 +21,7 @@ import { outdoorAt, standsAt } from './where';
 declare module '../../world/types' {
   interface InteractKinds {
     reader: true;
+    lift: true;
   }
 }
 
@@ -76,6 +77,30 @@ export function installCampus(ctx: Ctx, parts: Pick<Parts, 'travel'>) {
       if (now - tappedAt < 800) return;
       tappedAt = now;
       ctx.net.send({ t: 'campus.tap', building: b.id });
+    },
+  });
+
+  // Another building's elevator, down in its garage: up to its bottom floor, if your card opens the building.
+  ctx.interactions.define('lift', {
+    reach: 4.5,
+    hint: (it) => {
+      const b = buildingOf(it.building);
+      if (!b) return { k: '', parts: [] };
+      const name = b.mine ? 'your building' : `${clip(b.name, 24)}’s building`;
+      return {
+        k: `lift|${b.id}|${b.access}|${b.bottom ?? ''}`,
+        parts: [hintTitle('🛗 Elevator'), aside(b.access ? `Garage · up into ${name}` : `${name} · your card won’t call it`), ...(b.access && b.bottom ? [key('E', 'Ride up')] : [])],
+      };
+    },
+    use: (it, k) => {
+      const b = buildingOf(it.building);
+      if (k !== 'E' || !b) return;
+      if (!b.access || !b.bottom) {
+        ctx.sound.cardReader(false);
+        toast(b.access ? `🛗 ${b.name}’s building has no floors yet` : `🪪 Access denied: ask ${b.name} to put you on their guest list`, 'warn');
+        return;
+      }
+      parts.travel.ride(b.bottom);
     },
   });
 
