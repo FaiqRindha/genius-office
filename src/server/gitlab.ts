@@ -84,6 +84,20 @@ export class GitLabSignIns {
     return this.get(id).state;
   }
 
+  /** Everyone signed in to a GitLab, with their tokens (for the GitLab world: see gitlab-world.ts). */
+  everyone(): { account: string; url: string; token: string }[] {
+    let ids: string[] = [];
+    try {
+      ids = readdirSync(this.homes).filter((n) => ACCOUNT_ID.test(n)).sort();
+    } catch {
+      return [];
+    }
+    return ids.flatMap((account) => {
+      const s = this.load(account);
+      return s ? [{ account, url: s.url, token: s.token }] : [];
+    });
+  }
+
   /** The GitLab `id` is signed in to, and its token; undefined when they aren't. */
   creds(id: string): { url: string; token: string } | undefined {
     const s = this.load(id);
