@@ -158,3 +158,49 @@ test('the world is of the GitLab most people are signed in to', async () => {
   await world.sync();
   assert.deepEqual([world.state()?.url, world.state()?.projects], [URL_, 2]);
 });
+
+test("the Quarter's cells stand on land, clear of the beach, and every plot in its cell", async () => {
+  const { cellAt, plotAt, inQuarter, QUARTER, PER_CELL, BLOCK, CELLS } = await import('../src/shared/gitlab-quarter.ts');
+  assert.equal(CELLS, 20);
+  // Past them, a district isn't put up off the edge of the world.
+  assert.equal(plotAt([CELLS], 0), undefined);
+  const { shoreX } = await import('../src/shared/scenic.ts');
+  for (let c = 0; c < CELLS; c++) {
+    const at = cellAt(c);
+    assert.ok(at.x - QUARTER.cellW / 2 > shoreX(at.z) + 26, `cell ${c} is in the sea`);
+    assert.ok(at.z - QUARTER.cellD / 2 >= QUARTER.minZ, `cell ${c} is off the map`);
+    for (let i = 0; i < PER_CELL; i++) {
+      const p = plotAt([c], i)!;
+      assert.ok(Math.abs(p.x - at.x) + BLOCK.pitchX / 2 <= QUARTER.cellW / 2 && Math.abs(p.z - at.z) + BLOCK.pitchZ / 2 <= QUARTER.cellD / 2, `plot ${i} of cell ${c}`);
+      assert.ok(inQuarter(p.x, p.z));
+    }
+  }
+  // The path up from town is clear of trees too, and the town isn't the Quarter.
+  assert.ok(inQuarter(-36, -150));
+  assert.equal(inQuarter(0, 0), false);
+});
+
+test('a district with more buildings than a cell holds takes another, and nobody moves', () => {
+  const many = Array.from({ length: 20 }, (_, i) => p(100 + i, `big/sub${String(i).padStart(2, '0')}/app`));
+  const first = arrange([p(1, 'aaa/x'), ...many.slice(0, 10)]);
+  const cellsOf = (r: ReturnType<typeof arrange>) => Object.fromEntries(r.districts.map((d) => [d.key, d.cells]));
+  assert.deepEqual(cellsOf(first), { aaa: [0], big: [1] });
+  const later = arrange([p(1, 'aaa/x'), ...many, p(200, 'zzz/y')], first.slots);
+  // A new district's first cell comes before anyone's second: zzz gets 2, big's 17th to 20th go in 3.
+  assert.deepEqual(cellsOf(later), { aaa: [0], big: [1, 3], zzz: [2] });
+});
+
+test('a building looks the same every time, and fits on its plot', async () => {
+  const { styleOf, MAX_STOREYS } = await import('../src/client/features/gitlab-world/style.ts');
+  assert.deepEqual(styleOf('genius/genius-lab', 3), styleOf('genius/genius-lab', 3));
+  const looks = new Set<string>();
+  for (let i = 0; i < 200; i++) {
+    const s = styleOf(`group/ns${i}`, i % 40);
+    looks.add(`${s.shape}|${s.roof}|${s.windows}|${s.facade}`);
+    // A podium's base is 6 m wider and 4 m deeper than it: still inside a 34 × 36 plot, with room round it.
+    assert.ok((s.shape === 'podium' ? s.w + 6 : s.w) <= 32 && (s.shape === 'podium' ? s.d + 4 : s.d) <= 32, `${s.shape} ${s.w}×${s.d}`);
+    assert.ok(s.storeys >= 2 && s.storeys <= MAX_STOREYS);
+  }
+  // Varied: most of two hundred namespaces look unlike each other.
+  assert.ok(looks.size > 150, `${looks.size} looks`);
+});
