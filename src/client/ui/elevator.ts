@@ -6,7 +6,7 @@ import type { Net } from '../net';
 import { store } from '../state';
 import { h, openModal, timeAgo, toast, type Modal } from './dom';
 import { confirmDialog } from './prompt';
-import { addsFromGitLab, gitlabAdder, gitlabLabel, type GitLabAdder } from './elevator-gitlab';
+import { addsFromGitLab, gitlabAdder, gitlabLabel, gitlabLocked, type GitLabAdder } from './elevator-gitlab';
 
 // The elevator's panel: a button for every floor (every project), and "add a project", which clones
 // one of the repositories the office's gh login can see and makes it a new floor. The first time
@@ -125,6 +125,8 @@ export function openElevator(opts: ElevatorOptions): void {
     // Down in the garage, your floor is somewhere to go back up to.
     const mine = f.id === store.floor;
     const here = mine && !opts.downstairs();
+    // A GitLab project you're not a member of: its floor stays locked to you (its card reader won't open it).
+    const locked = !mine && gitlabLocked(f);
     const p = floorPalette(f.palette);
     const stats: (HTMLElement | string)[] = [];
     if (f.cloning) stats.push(h('span', { title: f.clone?.detail ?? 'Being cloned' }, cloneLabel(f.clone)));
@@ -136,19 +138,19 @@ export function openElevator(opts: ElevatorOptions): void {
     }
     const btn = h(
       'button.floor-btn',
-      { type: 'button', class: here ? 'here' : '', disabled: f.cloning || here, title: here ? "You're on this floor" : f.cloning ? 'Still being cloned' : `Ride ${mine ? 'back up ' : ''}to ${f.name}` },
+      { type: 'button', class: here ? 'here' : locked ? 'locked' : '', disabled: f.cloning || here || locked, title: here ? "You're on this floor" : f.cloning ? 'Still being cloned' : locked ? `🔒 You're not a member of ${f.name} on GitLab` : `Ride ${mine ? 'back up ' : ''}to ${f.name}` },
       h('span.floor-no', { style: `background:${p.trim}` }, String(i + 1)),
       h(
         'span.floor-text',
         {},
-        h('span.floor-name', {}, f.name, here ? h('span.here-tag', {}, 'you are here') : mine ? h('span.here-tag', {}, 'your floor') : null),
+        h('span.floor-name', {}, locked ? `🔒 ${f.name}` : f.name, here ? h('span.here-tag', {}, 'you are here') : mine ? h('span.here-tag', {}, 'your floor') : null),
         h('span.floor-sub', {}, [f.repo ?? gitlabLabel(f.gitlab) ?? f.dir, f.cloning ? f.clone?.detail : ''].filter(Boolean).join(' · ')),
         f.cloning ? cloneBar(f.clone) : null,
       ),
       h('span.floor-stats', {}, ...stats.flatMap((s, j) => (j ? [' ', s] : [s]))),
     );
     btn.addEventListener('click', () => {
-      if (here || f.cloning) return;
+      if (here || f.cloning || locked) return;
       modal.close();
       opts.ride(f.id);
     });
@@ -419,7 +421,7 @@ export function openElevator(opts: ElevatorOptions): void {
     h('div.body', {}, intro, floorsEl, addEl),
     h('footer', {}, h('span.grow', {}, setup ? 'Your office, one floor per project · Esc to look around first' : 'Pick a floor · Esc to stay here'), addBtn),
   );
-  const unsubs = [store.on('floors', () => (checkAdding(), renderFloors(), renderAdd())), store.on('repos', renderAdd), store.on('projectsDir', () => (editDir(false), renderAdd())), store.on('floor', renderFloors), store.on('peers', renderFloors), store.on('me', () => (renderFloors(), renderAdd())), store.on('gitlab', renderAdd)];
+  const unsubs = [store.on('floors', () => (checkAdding(), renderFloors(), renderAdd())), store.on('repos', renderAdd), store.on('projectsDir', () => (editDir(false), renderAdd())), store.on('floor', renderFloors), store.on('peers', renderFloors), store.on('me', () => (renderFloors(), renderAdd())), store.on('gitlab', renderAdd), store.on('gitlabAccess', renderFloors)];
   const modal = openModal(el, {
     doing: '🛗 at the elevator',
     // A stray click shouldn't lose the first-run panel; ✕ and Esc still close it.

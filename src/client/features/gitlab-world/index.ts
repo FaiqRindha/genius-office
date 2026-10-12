@@ -13,6 +13,7 @@ import { clip } from '../../ui/dom';
 import { addPlace, standsAt } from '../campus/where';
 import { addBuildingHeight } from '../../core/floors';
 import { MAX_FLOORS } from './world';
+import { floorReader } from './floor-reader';
 import { plotAt } from '../../../shared/gitlab-quarter';
 import { addMapLayer, mapChanged } from '../campus/map';
 import { quarterLayer } from './map';
@@ -61,9 +62,14 @@ export function installGitLabWorld(ctx: Ctx, parts: Pick<Parts, 'travel'>) {
     });
     return { it, post };
   };
+  // And on every floor of it, a reader beside the elevator: each floor's a project, by your own access.
+  const onFloor = floorReader();
+  ctx.office.group.add(onFloor.group);
+  ctx.usables.add({ usable: () => [onFloor.it] });
   const here = () => {
     const id = store.campus.here;
     const inGitLab = id.startsWith(GITLAB);
+    onFloor.show(inGitLab ? id.slice(GITLAB.length) : undefined);
     quarter.setHere(standsAt(id), inGitLab ? id.slice(GITLAB.length) : undefined);
     const home = homeReader();
     if (home.it) home.it.off = inGitLab;
@@ -95,7 +101,7 @@ export function installGitLabWorld(ctx: Ctx, parts: Pick<Parts, 'travel'>) {
       const mine = levels ? b.floors.filter((f) => roleOf(levels[f.projectId])).length : 0;
       return {
         k: `${b.key}|${b.floors.length}|${mine}`,
-        parts: [hintTitle(`🦊 ${clip(b.name, 28)}`), aside(`${b.floors.length} project${b.floors.length === 1 ? '' : 's'}${levels ? ` · you're a member of ${mine}` : ''}`), key('E', 'Go in')],
+        parts: [hintTitle(`🦊 ${clip(b.name, 28)}`), aside(`${b.floors.length} project${b.floors.length === 1 ? '' : 's'}${levels ? ` · you're a member of ${mine}` : ''}`), key('E', it.y === 0 ? 'Choose a floor' : 'Go in')],
       };
     },
     use: (it, k) => {

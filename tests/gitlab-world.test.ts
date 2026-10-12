@@ -245,3 +245,17 @@ test("nothing of the Quarter's stands on its roads, and every garage opens onto 
     for (let z = g.minZ + 3; z < g.maxZ + 4; z += 1) assert.ok(onPavement({ x, z, rotY: 0 }), `garage at ${x},${z}`);
   }
 });
+
+test("a GitLab floor you're not a member of is locked in the elevator; one you are, or that isn't GitLab's, isn't", async () => {
+  const { store } = await import('../src/client/state/index.ts');
+  const { gitlabLocked } = await import('../src/client/ui/elevator-gitlab.ts');
+  const world = arrange([p(7, 'g/sub/app'), p(8, 'g/sub/tool')]);
+  store.gitlabWorld = { url: 'https://akhlak.example', districts: world.districts, projects: 2, syncedAt: 0 };
+  // Your roles not in yet: not locked (the office checks when you go).
+  store.gitlabAccess = null;
+  assert.equal(gitlabLocked({ gitlab: 'https://akhlak.example/g/sub/app' }), false);
+  store.gitlabAccess = { 7: 30 };
+  assert.equal(gitlabLocked({ gitlab: 'https://akhlak.example/g/sub/app' }), false);
+  assert.equal(gitlabLocked({ gitlab: 'https://akhlak.example/g/sub/tool' }), true);
+  assert.equal(gitlabLocked({}), false);
+});

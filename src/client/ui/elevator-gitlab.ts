@@ -183,3 +183,27 @@ export function gitlabAdder(net: Net, ride: (floor: string) => void, setup: bool
   setTimeout(() => input.focus(), 30);
   return { el, render, dispose: () => (clearTimeout(startTimer), unsubs.forEach((off) => off())) };
 }
+
+/**
+ * Whether floor `f` is a GitLab project you're not a member of (see server/gitlab-access.ts): it
+ * stays locked to you, its button 🔒 in the elevator. Unsure (your roles not in yet): not locked;
+ * the office checks again when you go.
+ */
+export function gitlabLocked(f: { gitlab?: string }): boolean {
+  const levels = store.gitlabAccess;
+  if (!f.gitlab || !levels) return false;
+  const path = (() => {
+    try {
+      return new URL(f.gitlab).pathname.replace(/^\/+|\/+$/g, '').toLowerCase();
+    } catch {
+      return '';
+    }
+  })();
+  for (const d of store.gitlabWorld?.districts ?? []) {
+    for (const b of d.buildings) {
+      const floor = b.floors.find((x) => path.endsWith(x.path.toLowerCase()));
+      if (floor) return !(levels[floor.projectId] >= 10);
+    }
+  }
+  return false;
+}
