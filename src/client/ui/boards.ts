@@ -283,8 +283,9 @@ export function openBoard(kind: 'issues' | 'pulls', net: Net, actions: BoardActi
                 `by ${it.author}`,
                 it.reviewDecision === 'CHANGES_REQUESTED' ? '🛠 changes requested' : '',
                 CHECK_ICON[it.checks],
-                h('span', { style: 'color:#2a9d4b' }, `+${it.additions}`),
-                h('span', { style: 'color:#c3423f' }, `-${it.deletions}`),
+                // A GitLab's list of merge requests doesn't count lines.
+                onGitLab() ? '' : h('span', { style: 'color:#2a9d4b' }, `+${it.additions}`),
+                onGitLab() ? '' : h('span', { style: 'color:#c3423f' }, `-${it.deletions}`),
                 timeAgo(it.updatedAt),
               ],
               i,
