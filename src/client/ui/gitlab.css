@@ -1,0 +1,2 @@
+/* The GitLab card in 🔐 Your sign-ins: its address over its token. */
+.signin-gitlab { display: flex; flex-direction: column; gap: 8px; }
