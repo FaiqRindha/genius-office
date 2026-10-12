@@ -5,6 +5,7 @@ import { store } from '../state';
 import { h, openModal, type Modal } from './dom';
 import { confirmDialog } from './prompt';
 import { copyButton } from './team';
+import { gitlabCard } from './gitlab';
 
 const NAMES: Record<SignInKind, string> = { claude: 'Claude', github: 'GitHub' };
 
@@ -21,6 +22,7 @@ export function openSignIns(net: Net, why?: string) {
   const close = h('button.btn.close', { 'aria-label': 'Close' }, '✕');
   const banner = h('p.team-status', { hidden: true });
   const cards = h('div.signins');
+  const gitlab = gitlabCard(net);
   const el = h(
     'div.modal',
     { role: 'dialog', 'aria-label': 'Your sign-ins', style: 'width:min(640px,100%)' },
@@ -31,6 +33,7 @@ export function openSignIns(net: Net, why?: string) {
       h('p.note.lead', {}, 'Your workers run on your own Claude plan, and the office acts on GitHub as you: comments, merges and pull requests show up under your name. Only your workers use them.'),
       banner,
       cards,
+      h('div.signins', {}, gitlab.el),
       h('p.note', {}, 'Or open a 🐚 shell at any desk: it runs as you, so ', h('code', {}, 'claude auth login'), ' and ', h('code', {}, 'gh auth login'), ' typed there sign you in too.'),
     ),
   );
@@ -154,6 +157,7 @@ export function openSignIns(net: Net, why?: string) {
   const modal = openModal(el, {
     onClose: () => {
       unsub();
+      gitlab.dispose();
       open = null;
     },
   });
