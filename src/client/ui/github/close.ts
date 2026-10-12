@@ -3,7 +3,7 @@ import type { Net } from '../../net';
 import { store, workerForPull } from '../../state';
 import { h, openModal } from '../dom';
 import { closeWaiters } from './api';
-import { onGitLab } from '../forge';
+import { forgeName, onGitLab } from '../forge';
 
 // ---- Close dialog -------------------------------------------------------------------------------
 
@@ -38,7 +38,7 @@ export function openClose(kind: 'issue' | 'pull', it: GhIssue | GhPull, net: Net
       {},
       h('p.gh-merge-title', {}, it.title, pull ? h('small', {}, `${pull.headRefName} → ${pull.baseRefName}`) : null),
       pull
-        ? h('div.gh-status.muted', {}, h('span', {}, 'ℹ️'), `It won't be merged, and can be reopened on GitHub later.${w ? ` ${w.name} is still at a desk working on its branch.` : ''}`)
+        ? h('div.gh-status.muted', {}, h('span', {}, 'ℹ️'), `It won't be merged, and can be reopened on ${forgeName()} later.${w ? ` ${w.name} is still at a desk working on its branch.` : ''}`)
         : h('label', {}, 'Why'),
       // A GitLab issue is just closed: it has no "not planned".
       pull ? h('label.gh-check', { for: 'close-del' }, del, `Delete ${pull.headRefName} too`) : onGitLab() ? null : reasons,
