@@ -6,6 +6,7 @@ import { FLOOR_PALETTES, MAX_FLOORS, normalizeRepo, sameRepo } from '../shared/f
 import type { CloneProgress, ProjectsDirState, RepoChoice } from '../shared/protocol.js';
 import { CloneRun, dropLog, whyCloneFailed, type CloneEnd, type CloneRunOptions } from './clone.js';
 import { gh } from './github.js';
+import type { GhAs } from './signins.js';
 
 /** A floor as floors.json keeps it. */
 export interface FloorDef {
@@ -43,6 +44,8 @@ interface Pending {
   owner?: string;
   /** GitHub says the repository has no commits yet, so there's nothing to check out. */
   empty: boolean;
+  /** Whose GitHub sign-in it's cloned with (see SignIns.ghAs); the office machine's own when missing. */
+  env?: Record<string, string>;
 }
 
 /** A clone under way, as cloning.json keeps it for the next office to pick up (see resumeClones). */
@@ -84,7 +87,8 @@ export class Building {
   private logsDir: string;
   /** Hears when a clone gets further along. */
   private cloneChanged?: () => void;
-  private repoCache?: { at: number; repos: Promise<RepoChoice[]> };
+  /** The repositories each GitHub sign-in can see, by its key ('' for the office machine's own). */
+  private repoCache = new Map<string, { at: number; repos: Promise<RepoChoice[]> }>();
   /** The checkout the office was started in (see ensureLocal), and the repository it's a checkout of. */
   private local?: { dir: string; repo?: string };
   /** The floor that checkout is, while it is one. */
@@ -281,7 +285,7 @@ export class Building {
    * checkout that's already where the clone would go is used as it is. `account` (whoever's adding it)
    * can stop the clone, as admins can.
    */
-  async add(input: string, by: string, started: (def: FloorDef) => void, account?: string): Promise<FloorDef | string> {
+  async add(input: string, by: string, started: (def: FloorDef) => void, account?: string, as?: GhAs): Promise<FloorDef | string> {
     const wanted = normalizeRepo(input);
     if (!wanted) return 'Pick a repository, or type it as owner/name';
     if (this.defs.some((d) => sameRepo(d.repo, wanted))) return `${wanted} already has a floor`;
@@ -303,7 +307,7 @@ export class Building {
     let repo: string;
     let empty = false;
     try {
-      const view = JSON.parse(await gh(['repo', 'view', wanted, '--json', 'nameWithOwner,isEmpty'], this.dataDir, 30_000)) as { nameWithOwner?: string; isEmpty?: boolean };
+      const view = JSON.parse(await gh(['repo', 'view', wanted, '--json', 'nameWithOwner,isEmpty'], this.dataDir, 30_000, as?.env)) as { nameWithOwner?: string; isEmpty?: boolean };
       repo = normalizeRepo(view.nameWithOwner) ?? wanted;
       empty = view.isEmpty === true;
     } catch (err) {
@@ -316,7 +320,7 @@ export class Building {
     const dest = path.join(this.projectsDir, owner, name);
     if (this.defs.some((d) => path.resolve(d.dir) === dest)) return `${dest} is already a floor`;
     const def = this.newDef(name, repo, dest, by, account);
-    const pending: Pending = { def, owner: account, empty };
+    const pending: Pending = { def, owner: account, empty, env: as?.env };
     this.cloning.set(key, pending);
     started(def);
     try {
@@ -350,7 +354,7 @@ export class Building {
     } catch (err) {
       return `Couldn't make ${this.logsDir}: ${(err as Error).message}`;
     }
-    const run = await CloneRun.start(repo, dest, path.join(this.logsDir, `${repo.replace('/', '__')}.log`), { ...this.opts.clone, changed: () => this.cloneChanged?.() });
+    const run = await CloneRun.start(repo, dest, path.join(this.logsDir, `${repo.replace('/', '__')}.log`), { ...this.opts.clone, env: p.env, changed: () => this.cloneChanged?.() });
     if (typeof run === 'string') return run;
     p.run = run;
     this.saveClones();
@@ -371,14 +375,15 @@ export class Building {
   }
 
   /** Repositories the office's `gh` login can clone, most recently pushed first. */
-  async repos(refresh = false): Promise<RepoChoice[]> {
-    const cached = this.repoCache;
+  async repos(refresh = false, as?: GhAs): Promise<RepoChoice[]> {
+    const key = as?.key ?? '';
+    const cached = this.repoCache.get(key);
     if (cached && !refresh && Date.now() - cached.at < REPOS_TTL_MS) return cached.repos;
-    const repos = listRepos(this.dataDir);
-    this.repoCache = { at: Date.now(), repos };
+    const repos = listRepos(this.dataDir, as?.env);
+    this.repoCache.set(key, { at: Date.now(), repos });
     // A failure is worth asking again next time, not keeping for five minutes.
     repos.catch(() => {
-      if (this.repoCache?.repos === repos) this.repoCache = undefined;
+      if (this.repoCache.get(key)?.repos === repos) this.repoCache.delete(key);
     });
     return repos;
   }
@@ -554,7 +559,7 @@ function cloneHere(repo: string, dest: string): Promise<string | undefined> {
   });
 }
 
-async function listRepos(cwd: string): Promise<RepoChoice[]> {
+async function listRepos(cwd: string, env?: Record<string, string>): Promise<RepoChoice[]> {
   const out = await gh(
     [
       'api',
@@ -565,6 +570,7 @@ async function listRepos(cwd: string): Promise<RepoChoice[]> {
     ],
     cwd,
     90_000,
+    env,
   );
   const repos: RepoChoice[] = [];
   const seen = new Set<string>();
