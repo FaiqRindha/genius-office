@@ -6,7 +6,8 @@ import type { Net } from '../net';
 import { store } from '../state';
 import { h, openModal, timeAgo, toast, type Modal } from './dom';
 import { confirmDialog } from './prompt';
-import { addsFromGitLab, gitlabAdder, gitlabLabel, gitlabLocked, type GitLabAdder } from './elevator-gitlab';
+import { storeyOf } from '../core/floors';
+import { addsFromGitLab, gitlabAdder, gitlabLabel, gitlabLocked, gitlabStoreys, type GitLabAdder } from './elevator-gitlab';
 
 // The elevator's panel: a button for every floor (every project), and "add a project", which clones
 // one of the repositories the office's gh login can see and makes it a new floor. The first time
@@ -139,7 +140,7 @@ export function openElevator(opts: ElevatorOptions): void {
     const btn = h(
       'button.floor-btn',
       { type: 'button', class: here ? 'here' : locked ? 'locked' : '', disabled: f.cloning || here || locked, title: here ? "You're on this floor" : f.cloning ? 'Still being cloned' : locked ? `🔒 You're not a member of ${f.name} on GitLab` : `Ride ${mine ? 'back up ' : ''}to ${f.name}` },
-      h('span.floor-no', { style: `background:${p.trim}` }, String(i + 1)),
+      h('span.floor-no', { style: `background:${p.trim}` }, String(storeyOf(f, i) + 1)),
       h(
         'span.floor-text',
         {},
@@ -225,10 +226,12 @@ export function openElevator(opts: ElevatorOptions): void {
   const renderFloors = () => {
     const floors = store.floors;
     const built = floors.some((f) => !f.cloning);
+    // In a GitLab building, every storey's there, opened or not (see elevator-gitlab.ts).
+    const storeys = gitlabStoreys(opts.net, floorRow, (floor) => (modal.close(), opts.ride(floor)));
     // Top floor first, the way an elevator's buttons stack, with the roof over them, floor 1 and then the garage at the bottom.
     floorsEl.replaceChildren(
       ...(built ? [roofButton()] : []),
-      ...(floors.length ? floors.map(floorRow).reverse() : [h('p.empty', {}, 'No floors yet.')]),
+      ...(storeys ?? (floors.length ? floors.map(floorRow).reverse() : [h('p.empty', {}, 'No floors yet.')])),
       ...(built ? [garageButton()] : []),
     );
   };
@@ -421,7 +424,7 @@ export function openElevator(opts: ElevatorOptions): void {
     h('div.body', {}, intro, floorsEl, addEl),
     h('footer', {}, h('span.grow', {}, setup ? 'Your office, one floor per project · Esc to look around first' : 'Pick a floor · Esc to stay here'), addBtn),
   );
-  const unsubs = [store.on('floors', () => (checkAdding(), renderFloors(), renderAdd())), store.on('repos', renderAdd), store.on('projectsDir', () => (editDir(false), renderAdd())), store.on('floor', renderFloors), store.on('peers', renderFloors), store.on('me', () => (renderFloors(), renderAdd())), store.on('gitlab', renderAdd), store.on('gitlabAccess', renderFloors)];
+  const unsubs = [store.on('floors', () => (checkAdding(), renderFloors(), renderAdd())), store.on('repos', renderAdd), store.on('projectsDir', () => (editDir(false), renderAdd())), store.on('floor', renderFloors), store.on('peers', renderFloors), store.on('me', () => (renderFloors(), renderAdd())), store.on('gitlab', renderAdd), store.on('gitlabAccess', renderFloors), store.on('campus', renderFloors), store.on('gitlabWorld', renderFloors)];
   const modal = openModal(el, {
     doing: '🛗 at the elevator',
     // A stray click shouldn't lose the first-run panel; ✕ and Esc still close it.

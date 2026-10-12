@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { CELLS, QUARTER, QUARTER_ROADS, STREET_W, cellAt, frontOf, plotAt } from '../../../shared/gitlab-quarter';
-import type { WorldBuilding, WorldDistrict, WorldState } from '../../../shared/gitlab-world';
+import { storeysOf, type WorldBuilding, type WorldDistrict, type WorldState } from '../../../shared/gitlab-world';
 import { FOOTPRINT, READER } from '../../../shared/campus';
 import { CAR, CARS } from '../../../shared/garage';
 import { SLAB, STOREY, STREET_Y, WALL_HEIGHT } from '../../../shared/layout';
@@ -50,8 +50,8 @@ const G = STREET_Y;
 const PAVE = '#c9c2b8';
 const ASPHALT = '#5b606c';
 const SIGN = { color: '#2b2d42', bg: '#fffaf3' } as const;
-/** The tallest a building's drawn, however many projects it has (its sign says how many). */
-export const MAX_FLOORS = 16;
+/** The tallest a building's drawn from outside, however many storeys it has (inside, it's as tall as it is). */
+export const MAX_FLOORS = 100;
 /** Past this far from you, a building isn't drawn (the fog's thick long before it). */
 const DRAWN = 260;
 
@@ -103,7 +103,8 @@ function reader(): THREE.Group {
  */
 export function officeBuilding(b: Pick<WorldBuilding, 'name' | 'floors'>, night: NightParts): { group: THREE.Group; solid: Collider[]; top: number } {
   const g = new THREE.Group();
-  const floors = Math.max(1, Math.min(MAX_FLOORS, b.floors.length));
+  // As tall as its storeys, the same before you go in and after (see storeysOf).
+  const floors = Math.max(1, Math.min(MAX_FLOORS, storeysOf(b)));
   const tower = buildTower([], night);
   // Every floor of it, from the bottom one up, and its roof on top (as the campus puts others up).
   tower.set(floors, floors);
@@ -248,7 +249,7 @@ export function buildQuarter(ground: THREE.Group, colliders: Collider[], night: 
   const set = (state: WorldState | null) => {
     shown = state;
     // Only rebuilt when what it shows changed (not on every look the server takes).
-    const key = state ? JSON.stringify([inside, state.districts.map((d) => [d.key, d.cells, d.buildings.map((b) => [b.key, b.slot, b.name, b.floors.length])])]) : '';
+    const key = state ? JSON.stringify([inside, state.districts.map((d) => [d.key, d.cells, d.buildings.map((b) => [b.key, b.slot, b.name, storeysOf(b)])])]) : '';
     if (key === built) return;
     built = key;
     for (const o of [...root.children]) dispose(o);

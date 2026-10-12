@@ -259,3 +259,18 @@ test("a GitLab floor you're not a member of is locked in the elevator; one you a
   assert.equal(gitlabLocked({ gitlab: 'https://akhlak.example/g/sub/tool' }), true);
   assert.equal(gitlabLocked({}), false);
 });
+
+test("each project's floor is its own for good: the same storey whatever comes, goes or is opened", () => {
+  const storeys = (r: ReturnType<typeof arrange>, key: string) => Object.fromEntries(r.districts.flatMap((d) => d.buildings).find((b) => b.key === key)!.floors.map((f) => [f.name, f.level + 1]));
+  const first = arrange(AKHLAK);
+  // Oldest project first, from the bottom.
+  assert.deepEqual(storeys(first, 'genius/genius-lab'), { skynet: 1, 'mkbot-sky': 2, benchmark_databench: 3 });
+  assert.deepEqual(arrange(AKHLAK, first.slots), first, 'arranged again, nothing moves');
+  // mkbot-sky goes: nothing above it moves down, and its storey stays empty till a newcomer takes it.
+  const gone = arrange(AKHLAK.filter((x) => x.id !== 4), first.slots);
+  assert.deepEqual(storeys(gone, 'genius/genius-lab'), { skynet: 1, benchmark_databench: 3 });
+  const added = arrange([...AKHLAK.filter((x) => x.id !== 4), p(20, 'genius/genius-lab/newbie'), p(21, 'genius/genius-lab/later')], gone.slots);
+  assert.deepEqual(storeys(added, 'genius/genius-lab'), { skynet: 1, newbie: 2, benchmark_databench: 3, later: 4 });
+  // Floors come bottom up.
+  assert.deepEqual(added.districts.flatMap((d) => d.buildings).find((b) => b.key === 'genius/genius-lab')!.floors.map((f) => f.level), [0, 1, 2, 3]);
+});

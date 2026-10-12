@@ -86,6 +86,10 @@ export function createServices(ctx: Ctx): BuildingServices {
     },
   );
   gitlabAccess.projectOf = (floor) => floor.gitlabProjectId ?? (floor.gitlab ? gitlabWorld.projectAt(floor.gitlab)?.id : undefined);
+  ctx.campus.levelOf = (floor) => {
+    const id = floor.gitlab ? gitlabAccess.projectOf!(floor) : undefined;
+    return id === undefined ? undefined : gitlabWorld.levelOf(id);
+  };
   ctx.campus.floorGate = (who, floor) => {
     if (!floor.gitlab || !who.accountId) return true;
     const id = gitlabAccess.projectOf!(floor);

@@ -88,6 +88,9 @@ test('what you see of the campus: the office’s own building, and where each op
   assert.deepEqual(campus.ids(), [MAIN_BUILDING]);
   // On a GitLab floor, you're in its building (which stands on its plot in the Quarter).
   assert.equal(campus.state(bob, `${GITLAB_BUILDING}g/sub`, defs, open).here, `${GITLAB_BUILDING}g/sub`);
+  // Its storey is its own for good, however many of the building's floors are opened (see gitlab-world.ts).
+  campus.levelOf = (f) => (f.gitlab ? 6 : undefined);
+  assert.deepEqual(campus.state(bob, MAIN_BUILDING, defs, open).floors, { 'ada-api': [MAIN_BUILDING, 0], lobby: [MAIN_BUILDING, 1], app: [`${GITLAB_BUILDING}g/sub`, 6] });
 });
 
 test('where you are on the campus: your floor’s building, else the last one you were in, else the office’s', () => {

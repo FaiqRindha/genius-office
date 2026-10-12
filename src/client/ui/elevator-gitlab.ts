@@ -1,9 +1,10 @@
 import './elevator-gitlab.css';
-import type { GitLabProject } from '../../shared/protocol';
+import type { WorldBuilding } from '../../shared/gitlab-world';
+import type { FloorInfo, GitLabProject } from '../../shared/protocol';
 import { cloneStep } from '../../shared/floors';
 import type { Net } from '../net';
 import { store } from '../state';
-import { h, timeAgo } from './dom';
+import { h, timeAgo, toast } from './dom';
 
 // The elevator's "add a project" for someone signed in to a self-hosted GitLab (see
 // server/gitlab-projects.ts): their GitLab's projects in place of GitHub's repositories. Picking one
@@ -74,7 +75,7 @@ export function gitlabAdder(net: Net, ride: (floor: string) => void, setup: bool
       { role: 'option', class: sel ? 'sel' : '', 'aria-selected': String(sel), title: p.description ?? p.path },
       h('span.nm', {}, p.path),
       h('span.desc', {}, p.description ?? ''),
-      floor ? h('span.pill', {}, floor.id === store.floor ? 'you are here' : `floor ${store.floors.indexOf(floor) + 1}`) : p.pushedAt ? h('span.when', {}, timeAgo(p.pushedAt)) : null,
+      floor ? h('span.pill', {}, floor.id === store.floor ? 'you are here' : `floor ${(store.campus.floors?.[floor.id]?.[1] ?? store.floors.indexOf(floor)) + 1}`) : p.pushedAt ? h('span.when', {}, timeAgo(p.pushedAt)) : null,
     );
     r.addEventListener('click', () => {
       if (adding) return;
@@ -206,4 +207,60 @@ export function gitlabLocked(f: { gitlab?: string }): boolean {
     }
   }
   return false;
+}
+
+/** The GitLab building you're in (see features/gitlab-world): its floors are its projects, each on its own storey for good. */
+export function gitlabBuildingHere(): WorldBuilding | undefined {
+  const here = store.campus.here;
+  if (!here?.startsWith('gitlab:')) return undefined;
+  const key = here.slice('gitlab:'.length);
+  return store.gitlabWorld?.districts.flatMap((d) => d.buildings).find((b) => b.key === key);
+}
+
+/** Waiting on the office to open a project's floor, to ride there once it has (see gitlab.enter). */
+let entering: { projectId: number; off: () => void } | null = null;
+
+/**
+ * The elevator's buttons in a GitLab building, top storey first: every one of its projects, whether
+ * its floor's opened yet or not, at the storey that's always its own. An opened one is `opened`'s
+ * button; one not opened yet is an empty floor you go up to (the office clones it first), or 🔒 when
+ * you aren't a member of it. Undefined outside a GitLab building.
+ */
+export function gitlabStoreys(net: Net, opened: (f: FloorInfo, storey: number) => HTMLElement, ride: (floor: string) => void): HTMLElement[] | undefined {
+  const b = gitlabBuildingHere();
+  if (!b) return undefined;
+  const at = store.campus.floors ?? {};
+  const levels = store.gitlabAccess;
+  return [...b.floors]
+    .sort((x, y) => y.level - x.level)
+    .map((w) => {
+      const f = store.floors.find((o) => at[o.id]?.[0] === store.campus.here && at[o.id]?.[1] === w.level);
+      if (f) return opened(f, w.level);
+      const locked = !!levels && !(levels[w.projectId] >= 10);
+      const busy = entering?.projectId === w.projectId;
+      const btn = h(
+        'button.floor-btn.empty',
+        { type: 'button', class: locked ? 'locked' : '', disabled: locked || busy, title: locked ? `🔒 You're not a member of ${w.path} on GitLab` : `Go up to ${w.path} (its floor's opened for you)` },
+        h('span.floor-no', { style: 'background:#6c757d' }, String(w.level + 1)),
+        h('span.floor-text', {}, h('span.floor-name', {}, locked ? `🔒 ${w.name}` : w.name), h('span.floor-sub', {}, busy ? '⏳ Opening its floor…' : `${w.path} · not opened yet`)),
+        h('span.floor-stats', {}),
+      );
+      btn.addEventListener('click', () => {
+        if (locked || entering) return;
+        const off = store.on('gitlabEntered', () => {
+          const m = store.gitlabEntered;
+          if (!m || m.projectId !== w.projectId) return;
+          entering?.off();
+          entering = null;
+          if (m.floor) ride(m.floor);
+          else toast(m.error ?? `${w.name}'s floor couldn't be opened`);
+        });
+        entering = { projectId: w.projectId, off };
+        store.gitlabEntered = null;
+        net.send({ t: 'gitlab.enter', projectId: w.projectId });
+        btn.disabled = true;
+        btn.querySelector('.floor-sub')!.textContent = '⏳ Opening its floor…';
+      });
+      return btn;
+    });
 }

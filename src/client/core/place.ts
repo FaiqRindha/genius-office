@@ -8,7 +8,7 @@ import type { Arrival } from '../features/climbing/controller';
 import { rememberSpot, store, type Spot } from '../state';
 import type { Ctx } from './context';
 import type { CoreState } from './ctx';
-import { builtFloors } from './floors';
+import { builtFloors, storeys } from './floors';
 import type { Parts } from './parts';
 
 export function installPlace(ctx: Ctx, core: CoreState, parts: Pick<Parts, 'worlds' | 'seating' | 'climbing' | 'cars'>) {
@@ -71,8 +71,9 @@ export function installPlace(ctx: Ctx, core: CoreState, parts: Pick<Parts, 'worl
    */
   function standingAt(to: string): Arrival {
     const floors = builtFloors();
-    const from = floors.findIndex((f) => f.id === store.floor);
-    const there = floors.findIndex((f) => f.id === to);
+    const at = storeys(floors);
+    const from = at.get(store.floor ?? '') ?? -1;
+    const there = at.get(to) ?? -1;
     const below = inOffice() && player.pos.y < -SLAB - 0.05 && from >= 0 && there >= 0;
     return { x: player.pos.x, y: below ? player.pos.y + (from - there) * STOREY : player.pos.y, z: player.pos.z, rotY: player.facing };
   }

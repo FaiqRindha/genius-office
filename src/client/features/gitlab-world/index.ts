@@ -12,9 +12,9 @@ import { store } from '../../state';
 import { clip } from '../../ui/dom';
 import { addPlace, standsAt } from '../campus/where';
 import { addBuildingHeight } from '../../core/floors';
-import { MAX_FLOORS } from './world';
 import { floorReader } from './floor-reader';
 import { plotAt } from '../../../shared/gitlab-quarter';
+import { storeysOf } from '../../../shared/gitlab-world';
 import { addMapLayer, mapChanged } from '../campus/map';
 import { quarterLayer } from './map';
 import { openBuildingDoor, roleOf } from './ui';
@@ -52,7 +52,11 @@ export function installGitLabWorld(ctx: Ctx, parts: Pick<Parts, 'travel'>) {
   addPlace(plotOf);
   const insideBuilding = (id: string) => (id.startsWith(GITLAB) ? store.gitlabWorld?.districts.flatMap((d) => d.buildings).find((b) => b.key === id.slice(GITLAB.length)) : undefined);
   // A GitLab building's as tall as it has projects, inside as out (however many are opened yet).
-  addBuildingHeight(() => Math.min(MAX_FLOORS, insideBuilding(store.campus.here)?.floors.length ?? 0));
+  // Every storey it has, opened or not: the same height outside as in (see storeysOf).
+  addBuildingHeight(() => {
+    const b = insideBuilding(store.campus.here);
+    return b ? storeysOf(b) : 0;
+  });
   /** The campus's reader at the foot of the steps of the building you're in: in a GitLab one, the Quarter's is there instead. */
   const homeReader = () => {
     const it = ctx.office.campus.readers[0];

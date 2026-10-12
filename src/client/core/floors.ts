@@ -6,14 +6,38 @@ import { DESK_BY_ID, FLOOR, WING, deskBuilt, inWing } from '../../shared/layout'
 import type { FloorInfo } from '../../shared/protocol';
 import { store } from '../state';
 
-/** The floors of the building from the bottom up (not the ones still being cloned: nobody can go there yet). */
-export function builtFloors(): FloorInfo[] {
-  return store.floors.filter((f) => !f.cloning);
+/**
+ * Which storey of its building floor `f` is, from the bottom (0): where the campus puts it (a GitLab
+ * project's floor is always the same one, opened or not: see server/campus.ts), else `i`, its place in the list.
+ */
+export function storeyOf(f: FloorInfo, i: number): number {
+  return store.campus.floors?.[f.id]?.[1] ?? i;
 }
 
-/** How far each floor's back office goes, for the building's outside (the one you're on as you see it). */
+/** `floors` from the bottom storey up (see storeyOf). */
+export function byStorey(floors: FloorInfo[]): FloorInfo[] {
+  return floors
+    .map((f, i) => ({ f, at: storeyOf(f, i) }))
+    .sort((a, b) => a.at - b.at)
+    .map((x) => x.f);
+}
+
+/** The floors of the building from the bottom up (not the ones still being cloned: nobody can go there yet). */
+export function builtFloors(): FloorInfo[] {
+  return byStorey(store.floors.filter((f) => !f.cloning));
+}
+
+/** The storey `floors` (builtFloors) has each of them on, by id. */
+export function storeys(floors: FloorInfo[]): Map<string, number> {
+  return new Map(floors.map((f, i) => [f.id, storeyOf(f, i)]));
+}
+
+/** How far each storey's back office goes, for the building's outside (the one you're on as you see it); none on an empty one. */
 export function floorWings(floors: FloorInfo[]): number[] {
-  return floors.map((f) => (f.id === store.floor ? store.floorPlan.wing : (f.wing ?? 0)));
+  const at = storeys(floors);
+  const wings: number[] = [];
+  for (const f of floors) wings[at.get(f.id)!] = f.id === store.floor ? store.floorPlan.wing : (f.wing ?? 0);
+  return Array.from(wings, (w) => w ?? 0);
 }
 
 /**

@@ -23,7 +23,7 @@ import { restarting, showRestarting, showUpgraded } from '../ui/upgrade';
 import { routeWhiteboardMessage } from '../features/whiteboard/ui';
 import type { Ctx } from './context';
 import type { CoreState } from './ctx';
-import { builtFloors, pastTheWing } from './floors';
+import { builtFloors, pastTheWing, shownHeight, storeyOf } from './floors';
 import type { Parts } from './parts';
 
 export type ArrivalParts = Pick<Parts, 'worlds' | 'place' | 'travel' | 'maps' | 'views' | 'cards' | 'hoops' | 'bar' | 'golf' | 'bargames' | 'cars' | 'focus'>;
@@ -193,10 +193,13 @@ export function installArrival(ctx: Ctx, core: CoreState, parts: ArrivalParts) {
       ctx.world().setProjectName(store.floors.length ? 'Pick a floor' : 'Lobby');
       return;
     }
-    const n = store.floors.findIndex((f) => f.id === store.floor);
+    const i = store.floors.findIndex((f) => f.id === store.floor);
+    // Its storey (a GitLab building's are fixed, opened or not: see storeyOf), of however tall the building is.
+    const n = i < 0 ? -1 : storeyOf(store.floors[i], i);
+    const tall = shownHeight(Math.max(store.floors.length, n + 1));
     $('project-meta').classList.remove('lobby');
     $('project-name').textContent = `🏢 ${p.name}`;
-    $('project-meta').textContent = [n >= 0 && `🛗 floor ${n + 1} of ${store.floors.length}`, p.branch && `⎇ ${p.branch}`, p.dir, `default: ${providerLabel(p.defaultProvider, p)}`].filter(Boolean).join(' · ');
+    $('project-meta').textContent = [n >= 0 && `🛗 floor ${n + 1} of ${tall}`, p.branch && `⎇ ${p.branch}`, p.dir, `default: ${providerLabel(p.defaultProvider, p)}`].filter(Boolean).join(' · ');
     ctx.world().setProjectName(p.name);
   }
   store.on('floors', renderProject);

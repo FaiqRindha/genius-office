@@ -48,6 +48,8 @@ export class Campus {
   private last = new Map<string, string>();
   /** Whether `who` may go onto a floor, beyond its building's door (their GitLab access: see gitlab-access.ts). */
   floorGate?: (who: Who, floor: CampusFloor) => boolean;
+  /** Which floor of its building a floor is, when that's its own for good (a GitLab project's: see gitlab-world.ts). */
+  levelOf?: (floor: CampusFloor) => number | undefined;
 
   constructor(
     dataDir: string,
@@ -112,6 +114,12 @@ export class Campus {
     const up = new Map<string, number>();
     for (const f of open) {
       const b = this.of(f);
+      // A GitLab project's floor is where it always is in its building, opened or not; others stack as they open.
+      const fixed = this.levelOf?.(f);
+      if (fixed !== undefined) {
+        floors[f.id] = [b, fixed];
+        continue;
+      }
       const i = up.get(b) ?? 0;
       floors[f.id] = [b, i];
       up.set(b, i + 1);
