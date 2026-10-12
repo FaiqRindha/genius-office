@@ -3,6 +3,7 @@ import { WebSocket } from 'ws';
 import type { FloorDef } from '../building.js';
 import { Floor, type FloorContext } from '../floor.js';
 import { withGitLab } from '../gitlab.js';
+import { GitLabBoards } from '../gitlab-boards.js';
 import { ROOF } from '../../shared/rooftop.js';
 import type { FloorInfo, ServerMsg } from '../../shared/protocol.js';
 import type { Ctx, FloorHelpers, FloorsOpen } from './context.js';
@@ -119,7 +120,8 @@ export async function openFloors(ctx: Ctx, hookPort: number): Promise<FloorsOpen
     lent: (floor) => [...floors.values()].some((f) => f !== floor && worksIn(f, floor)),
     locksUp: () => !!ctx.maps.plan().sendHome?.keeps,
     runAs: withGitLab(ctx.signins, ctx.gitlab),
-    ghAs: (owner) => (owner ? ctx.signins.ghAs(owner) : undefined),
+    ghAs: (owner, gitlab) => (owner ? (gitlab ? ctx.gitlab.ghAs(owner) : ctx.signins.ghAs(owner)) : undefined),
+    gitlabBoards: (def, onIssues, onPulls) => new GitLabBoards(def.gitlab!, () => ctx.gitlab.reader(def.gitlab!, def.gitlabAccount), onIssues, onPulls),
   };
   /** Whether a worker on `from` works in `on`'s project too (see WorkerInfo.repos). */
   const worksIn = (from: Floor, on: Floor) => from.workers.list().some((w) => w.repos?.some((r) => r.floor === on.id));

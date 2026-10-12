@@ -19,6 +19,8 @@ export interface FloorDef {
   repo?: string;
   /** Or the project's page on a self-hosted GitLab (see gitlab-projects.ts): https://gitlab.example.com/group/project */
   gitlab?: string;
+  /** The account that added a GitLab floor, whose sign-in reads its boards first. */
+  gitlabAccount?: string;
   dir: string;
   palette: number;
   addedBy: string;
@@ -333,7 +335,7 @@ export class Building {
     if (this.cloning.has(src.url.toLowerCase())) return `${src.path} is already being cloned`;
     if (this.defs.length + this.cloning.size >= MAX_FLOORS) return `The building is full (${MAX_FLOORS} floors)`;
     const dest = path.join(this.projectsDir, src.host.replace(/:/g, '_'), ...src.path.split('/'));
-    const def: FloorDef = { ...this.newDef(src.name, undefined, dest, by), gitlab: src.url };
+    const def: FloorDef = { ...this.newDef(src.name, undefined, dest, by), gitlab: src.url, ...(account ? { gitlabAccount: account } : {}) };
     return this.begin(def, { owner: account, empty: src.empty, git: { url: src.cloneUrl, env, host: src.host } }, started);
   }
 
@@ -434,7 +436,7 @@ export class Building {
           id: s.id,
           name: typeof s.name === 'string' && s.name ? s.name.slice(0, 100) : path.basename(s.dir),
           repo: normalizeRepo(s.repo),
-          ...(floorGitLab(s.gitlab) ? { gitlab: floorGitLab(s.gitlab) } : {}),
+          ...(floorGitLab(s.gitlab) ? { gitlab: floorGitLab(s.gitlab), ...(typeof s.gitlabAccount === 'string' && /^[A-Za-z0-9]{6,64}$/.test(s.gitlabAccount) ? { gitlabAccount: s.gitlabAccount } : {}) } : {}),
           dir: s.dir,
           palette: Number.isInteger(s.palette) && (s.palette as number) >= 0 ? (s.palette as number) : 0,
           addedBy: typeof s.addedBy === 'string' ? s.addedBy : '?',

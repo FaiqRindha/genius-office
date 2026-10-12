@@ -14,10 +14,15 @@ export function gates(ctx: Ctx): Gates {
    */
   const takeIssue = (c: Client, floor: Floor, n: number) => {
     floor.queue.dropIssue(n);
-    const as = c.accountId ? ctx.signins.ghAs(c.accountId) : undefined;
-    if (typeof as === 'string') return ctx.warn(c, `Couldn't assign issue #${n} on GitHub: ${as}`);
-    void floor.github.claim(n, as).then((err) => ctx.warn(c, err && `Couldn't assign issue #${n} on GitHub: ${err}`));
+    const on = floor.def.gitlab ? 'GitLab' : 'GitHub';
+    const as = actAs(c.accountId, floor);
+    if (typeof as === 'string') return ctx.warn(c, `Couldn't assign issue #${n} on ${on}: ${as}`);
+    void floor.github.claim(n, as).then((err) => ctx.warn(c, err && `Couldn't assign issue #${n} on ${on}: ${err}`));
   };
+
+  /** How the office acts on `floor`'s boards for `account`: on GitHub (see SignIns.ghAs), or on its GitLab project (GitLabSignIns.ghAs). */
+  const actAs = (account: string | undefined, floor: Floor | undefined): GhAs | undefined | string =>
+    !account ? undefined : floor?.def.gitlab ? ctx.gitlab.ghAs(account) : ctx.signins.ghAs(account);
 
   /**
    * Runs `go` once `c` has a sign-in of their own to `which` (only accounts need one: on the shared
@@ -56,9 +61,10 @@ export function gates(ctx: Ctx): Gates {
   const withGitHub = (c: Client, go: (as: GhAs | undefined) => void, refused?: (why: string) => void) =>
     withSignIn(
       c,
-      'github',
+      // On a GitLab floor it's their GitLab sign-in, which actAs asks for.
+      ctx.floorOf(c)?.def.gitlab ? undefined : 'github',
       () => {
-        const as = c.accountId ? ctx.signins.ghAs(c.accountId) : undefined;
+        const as = actAs(c.accountId, ctx.floorOf(c));
         if (typeof as !== 'string') return go(as);
         if (refused) refused(as);
         else ctx.warn(c, as);
@@ -68,5 +74,5 @@ export function gates(ctx: Ctx): Gates {
   /** Needs a Claude sign-in of its own when the worker it starts runs Claude. */
   const claudeFor = (provider: string | undefined): SignInKind | undefined => (provider === 'claude' ? 'claude' : undefined);
 
-  return { takeIssue, withSignIn, withFreshBase, withGitHub, claudeFor };
+  return { takeIssue, actAs, withSignIn, withFreshBase, withGitHub, claudeFor };
 }

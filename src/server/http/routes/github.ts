@@ -18,7 +18,9 @@ export const githubRoutes = {
       const github = floor.github;
       try {
         // "You" on comments is your own GitHub login once you've signed in to it.
-        const me = session.account ? ctx.signins.githubLogin(session.account.id) : undefined;
+        // On a GitLab floor, it's your GitLab username.
+        const id = session.account?.id;
+        const me = !id ? undefined : floor.def.gitlab ? ctx.gitlab.state(id).who?.replace(/^@/, '') : ctx.signins.githubLogin(id);
         if (p === '/api/gh/pull') return send(res, 200, await github.pullDetail(n, me));
         if (p === '/api/gh/issue') return send(res, 200, await github.issueDetail(n, me));
         if (p === '/api/gh/labels') return send(res, 200, await github.repoLabels());

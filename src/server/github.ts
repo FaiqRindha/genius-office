@@ -162,6 +162,9 @@ export class Claims {
   }
 }
 
+/** What a floor's boards do, whoever they're on: GitHub (below) or a GitLab (see gitlab-boards.ts). */
+export type Boards = { [K in keyof GitHub]: GitHub[K] };
+
 export class GitHub {
   issues: GhState<GhIssue> = { items: [], fetchedAt: 0, loading: false };
   pulls: GhState<GhPull> = { items: [], fetchedAt: 0, loading: false };

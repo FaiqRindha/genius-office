@@ -175,6 +175,8 @@ export interface Gates {
   withFreshBase(c: Client, floor: Floor | Floor[], go: () => void): void;
   /** Runs `go` with how the office acts on GitHub for `c`: as them, or as itself (no account, or an admin's choice). */
   withGitHub(c: Client, go: (as: GhAs | undefined) => void, refused?: (why: string) => void): void;
+  /** How the office acts on `floor`'s boards (GitHub, or its GitLab project) for `account`: as them, as itself (undefined), or why it can't. */
+  actAs(account: string | undefined, floor: Floor | undefined): GhAs | undefined | string;
   /** Needs a Claude sign-in of its own when the worker it starts runs Claude. */
   claudeFor(provider: string | undefined): SignInKind | undefined;
 }

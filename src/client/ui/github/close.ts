@@ -3,6 +3,7 @@ import type { Net } from '../../net';
 import { store, workerForPull } from '../../state';
 import { h, openModal } from '../dom';
 import { closeWaiters } from './api';
+import { onGitLab } from '../forge';
 
 // ---- Close dialog -------------------------------------------------------------------------------
 
@@ -19,7 +20,7 @@ export function openClose(kind: 'issue' | 'pull', it: GhIssue | GhPull, net: Net
   const reasons = h('div.seg');
   const renderReasons = () => {
     reasons.replaceChildren(...(Object.keys(REASON_LABEL) as GhCloseReason[]).map((r) => h('button.btn', { type: 'button', class: r === reason ? 'on' : '', onclick: () => ((reason = r), renderReasons()) }, REASON_LABEL[r])));
-    go.textContent = pull ? '🚫 Close pull request' : `${reason === 'completed' ? '✔️' : '🚫'} Close as ${reason}`;
+    go.textContent = pull ? '🚫 Close pull request' : onGitLab() ? '✔️ Close issue' : `${reason === 'completed' ? '✔️' : '🚫'} Close as ${reason}`;
   };
   const comment = h('textarea', { rows: 4, placeholder: 'Leave a comment (optional)', 'aria-label': 'Closing comment' }) as HTMLTextAreaElement;
   const del = h('input', { type: 'checkbox', id: 'close-del' }) as HTMLInputElement;
@@ -39,7 +40,8 @@ export function openClose(kind: 'issue' | 'pull', it: GhIssue | GhPull, net: Net
       pull
         ? h('div.gh-status.muted', {}, h('span', {}, 'ℹ️'), `It won't be merged, and can be reopened on GitHub later.${w ? ` ${w.name} is still at a desk working on its branch.` : ''}`)
         : h('label', {}, 'Why'),
-      pull ? h('label.gh-check', { for: 'close-del' }, del, `Delete ${pull.headRefName} too`) : reasons,
+      // A GitLab issue is just closed: it has no "not planned".
+      pull ? h('label.gh-check', { for: 'close-del' }, del, `Delete ${pull.headRefName} too`) : onGitLab() ? null : reasons,
       comment,
       result,
     ),

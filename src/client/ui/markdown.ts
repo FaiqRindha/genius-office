@@ -119,5 +119,6 @@ export function markdownFile(src: string): HTMLElement {
 
 /** https://github.com/owner/repo from an issue or PR URL. */
 export function repoUrlOf(itemUrl: string): string {
-  return itemUrl.replace(/\/(pull|issues)\/\d+.*$/, '');
+  // GitHub's …/issues/12, or a GitLab's …/-/issues/12 and …/-/merge_requests/12.
+  return itemUrl.replace(/(?:\/-)?\/(pull|issues|merge_requests)\/\d+.*$/, '');
 }

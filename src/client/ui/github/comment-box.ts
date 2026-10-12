@@ -4,6 +4,7 @@ import { h } from '../dom';
 import { markdown } from '../markdown';
 import { commentWaiters } from './api';
 import { DRAFT_KEY, pref, savePref } from './prefs';
+import { forgeName, onGitLab } from '../forge';
 
 // ---- Comment box --------------------------------------------------------------------------------
 
@@ -30,7 +31,7 @@ export function commentBox(kind: 'issue' | 'pull', number: number, itemUrl: stri
   const shown = h('div.gh-compose-preview.hidden');
   const write = h('button.btn.on', { type: 'button' }, 'Write');
   const preview = h('button.btn', { type: 'button' }, 'Preview');
-  const who = h('span.grow', {}, "Posts to GitHub as the office's gh account");
+  const who = h('span.grow', {}, onGitLab() ? 'Posts to GitLab' : "Posts to GitHub as the office's gh account");
   const post = h('button.btn.primary', { type: 'button' }, '💬 Comment');
   const result = h('div.gh-merge-result.error.hidden');
   const el = h(
@@ -86,7 +87,7 @@ export function commentBox(kind: 'issue' | 'pull', number: number, itemUrl: stri
         saveDraft();
         setPreview(false);
         onPosted(msg.comment);
-      } else fail(msg.error ?? 'GitHub did not take the comment');
+      } else fail(msg.error ?? `${forgeName()} did not take the comment`);
       sync();
     });
     // The office drops messages while it's disconnected, and then no answer comes.
@@ -112,7 +113,7 @@ export function commentBox(kind: 'issue' | 'pull', number: number, itemUrl: stri
   return {
     el,
     setViewer(login) {
-      if (login) who.textContent = `Posts to GitHub as @${login}`;
+      if (login) who.textContent = `Posts to ${forgeName()} as @${login}`;
     },
     dispose: settle,
   };
