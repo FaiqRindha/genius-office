@@ -7,6 +7,7 @@ import { str } from '../../office/input.js';
 import { childEnv } from '../../workers.js';
 import { findProject, gitlabPath } from '../../gitlab-projects.js';
 import type { HandlerMap } from './types.js';
+import { alreadyAFloor } from './floors.js';
 
 /** The account `c` is signed in with; on the shared password there's none, and they're told why. */
 const accountOf = (ctx: Ctx, c: Client): string | undefined => {
@@ -58,6 +59,9 @@ export const gitlabHandlers = {
       // Asking GitLab first says whether this sign-in can see it at all, and gets the path's real case.
       const src = await findProject(creds.url, creds.token, path);
       if (typeof src === 'string') return answer({ error: src });
+      // A project is a floor in one building: say whose, and how to get in there instead.
+      const taken = [...ctx.building.list(), ...ctx.building.pending()].find((d) => d.gitlab?.toLowerCase() === src.url.toLowerCase());
+      if (taken) return answer({ error: alreadyAFloor(ctx, c, taken, src.path) });
       const r = await ctx.building.addGitLab(
         src,
         ctx.gitlab.apply(id, childEnv()),

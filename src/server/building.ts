@@ -342,7 +342,10 @@ export class Building {
     if (this.cloning.has(src.url.toLowerCase())) return `${src.path} is already being cloned`;
     // In the adder's own building, as a GitHub floor is (see add).
     if ([...this.defs, ...this.pending()].filter((d) => d.owner === account).length >= MAX_FLOORS) return `The building is full (${MAX_FLOORS} floors)`;
-    const dest = path.join(this.projectsDir, src.host.replace(/:/g, '_'), ...src.path.split('/'));
+    // <host>/<group.subgroup>/<project>: two levels, as GitHub's <owner>/<repo>, so no checkout ends up
+    // inside another (a GitLab may have group/app and group/app/tool both).
+    const parts = src.path.split('/');
+    const dest = path.join(this.projectsDir, src.host.replace(/:/g, '_'), parts.slice(0, -1).join('.'), parts[parts.length - 1]);
     const def: FloorDef = { ...this.newDef(src.name, undefined, dest, by, account), gitlab: src.url, ...(account ? { gitlabAccount: account } : {}) };
     return this.begin(def, { owner: account, empty: src.empty, git: { url: src.cloneUrl, env, host: src.host } }, started);
   }
@@ -352,6 +355,9 @@ export class Building {
     const dest = def.dir;
     const key = (def.gitlab ?? def.repo!).toLowerCase();
     if (this.defs.some((d) => path.resolve(d.dir) === dest)) return `${dest} is already a floor`;
+    // A checkout in another's folder would show up in its changes, and git would mix them up.
+    const nested = [...this.defs, ...this.pending()].find((d) => within(dest, path.resolve(d.dir)) || within(path.resolve(d.dir), dest));
+    if (nested) return `${tildify(dest)} would be in ${nested.name}'s checkout, or have it inside: move one of them first`;
     const pending: Pending = { def, ...p };
     this.cloning.set(key, pending);
     started(def);
@@ -441,16 +447,19 @@ export class Building {
       for (const s of Array.isArray(saved) ? saved : []) {
         if (typeof s.id !== 'string' || !/^[a-z0-9-]{1,40}$/.test(s.id) || ids.has(s.id) || typeof s.dir !== 'string' || !path.isAbsolute(s.dir)) continue;
         ids.add(s.id);
+        const gitlabAccount = floorGitLab(s.gitlab) && typeof s.gitlabAccount === 'string' && /^[A-Za-z0-9]{6,64}$/.test(s.gitlabAccount) ? s.gitlabAccount : undefined;
+        // A GitLab floor added before buildings had owners is in its adder's building, as one added now is.
+        const owner = typeof s.owner === 'string' && s.owner ? s.owner : gitlabAccount;
         this.defs.push({
           id: s.id,
           name: typeof s.name === 'string' && s.name ? s.name.slice(0, 100) : path.basename(s.dir),
           repo: normalizeRepo(s.repo),
-          ...(floorGitLab(s.gitlab) ? { gitlab: floorGitLab(s.gitlab), ...(typeof s.gitlabAccount === 'string' && /^[A-Za-z0-9]{6,64}$/.test(s.gitlabAccount) ? { gitlabAccount: s.gitlabAccount } : {}) } : {}),
+          ...(floorGitLab(s.gitlab) ? { gitlab: floorGitLab(s.gitlab), ...(gitlabAccount ? { gitlabAccount } : {}) } : {}),
           dir: s.dir,
           palette: Number.isInteger(s.palette) && (s.palette as number) >= 0 ? (s.palette as number) : 0,
           addedBy: typeof s.addedBy === 'string' ? s.addedBy : '?',
           addedAt: typeof s.addedAt === 'number' ? s.addedAt : Date.now(),
-          ...(typeof s.owner === 'string' && s.owner ? { owner: s.owner } : {}),
+          ...(owner ? { owner } : {}),
         });
       }
     } catch (err) {
