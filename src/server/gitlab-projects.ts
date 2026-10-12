@@ -10,6 +10,8 @@ const PATH = /^[A-Za-z0-9_][A-Za-z0-9_.-]*(?:\/[A-Za-z0-9_][A-Za-z0-9_.-]*)+$/;
 
 /** A GitLab project on its way to becoming a floor. */
 export interface GitLabFloorSource {
+  /** Its id on the GitLab. */
+  id?: number;
   /** The project's page, which is the floor's GitLab (FloorDef.gitlab): https://gitlab.example.com/group/project */
   url: string;
   /** What git clones: the project's page with .git, on the address its owner signed in with. */
@@ -70,12 +72,12 @@ export async function findProject(base: string, token: string, path: string): Pr
   try {
     const res = await api(base, token, `projects/${encodeURIComponent(path)}`);
     if (!res.ok) return `Couldn't find ${path} on ${host}: ${refused(res, base)}`;
-    const p = (await res.json()) as { path_with_namespace?: unknown; name?: unknown; empty_repo?: unknown };
+    const p = (await res.json()) as { id?: unknown; path_with_namespace?: unknown; name?: unknown; empty_repo?: unknown };
     // GitLab's own spelling of the path, in case it was typed in another case.
     const real = typeof p.path_with_namespace === 'string' ? gitlabPath(p.path_with_namespace) : undefined;
     if (!real) return `${host} doesn't look like a GitLab`;
     const url = `${base}/${real}`;
-    return { url, cloneUrl: `${url}.git`, path: real, name: typeof p.name === 'string' && p.name ? p.name.slice(0, 100) : real.split('/').pop()!, host, empty: p.empty_repo === true };
+    return { ...(typeof p.id === 'number' ? { id: p.id } : {}), url, cloneUrl: `${url}.git`, path: real, name: typeof p.name === 'string' && p.name ? p.name.slice(0, 100) : real.split('/').pop()!, host, empty: p.empty_repo === true };
   } catch (err) {
     const cause = (err as { cause?: { code?: string; message?: string } }).cause;
     return `Couldn't reach ${host}: ${cause?.code ?? cause?.message ?? (err as Error).message}`;

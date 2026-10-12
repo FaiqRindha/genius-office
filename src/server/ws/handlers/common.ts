@@ -15,5 +15,5 @@ export const here = (ctx: Ctx, c: Client): Floor | undefined => {
 export const workerOf = (ctx: Ctx, id: unknown, c: Client) => {
   const wid = str(id, 32);
   const floor = ctx.workerFloor(wid);
-  return floor && ctx.campus.mayEnter(c, ctx.campus.of(floor.def)) ? { wid, floor, info: floor.workers.get(wid)! } : undefined;
+  return floor && ctx.campus.mayEnterFloor(c, floor.def) ? { wid, floor, info: floor.workers.get(wid)! } : undefined;
 };

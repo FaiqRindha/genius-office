@@ -13,7 +13,7 @@ import type { Route } from '../router.js';
 export const floorParam = (ctx: Ctx, url: URL, session: Session): Floor | undefined => {
   const floor = ctx.floors.get(url.searchParams.get('floor') ?? '');
   const accountId = session.account?.id;
-  return floor && ctx.campus.mayEnter({ accountId, admin: ctx.meOf(accountId).admin }, ctx.campus.of(floor.def)) ? floor : undefined;
+  return floor && ctx.campus.mayEnterFloor({ accountId, admin: ctx.meOf(accountId).admin }, floor.def) ? floor : undefined;
 };
 
 export const fileRoutes = {

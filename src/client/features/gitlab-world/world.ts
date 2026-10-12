@@ -3,7 +3,7 @@ import { CELLS, QUARTER, QUARTER_PATH, cellAt, plotAt } from '../../../shared/gi
 import type { WorldBuilding, WorldDistrict, WorldState } from '../../../shared/gitlab-world';
 import { STOREY, STREET_Y } from '../../../shared/layout';
 import { mergeByColor, mesh, textPlane, toon } from '../../world/toon';
-import type { Collider } from '../../world/types';
+import type { Collider, Interactable } from '../../world/types';
 import type { Fixture, StreetSite } from '../../world/office/fixture';
 import { styleOf, type Style } from './style';
 
@@ -18,6 +18,10 @@ declare module '../../world/types' {
   interface OfficeHandles {
     gitlabWorld: GitLabQuarter;
   }
+  interface Interactable {
+    /** Which building of the GitLab Quarter a door is (its namespace: see WorldBuilding.key). */
+    gitlabBuilding?: string;
+  }
 }
 
 export interface GitLabQuarter {
@@ -25,6 +29,8 @@ export interface GitLabQuarter {
   set(state: WorldState | null): void;
   /** Where the building you're in stands in the world (see standsAt): what's in the way moves round it. */
   setHere(at: { x: number; z: number }): void;
+  /** Each building's door, where it is on the floor you're on (E there to go in: see index.ts). */
+  doors: Interactable[];
 }
 
 const G = STREET_Y;
@@ -176,9 +182,8 @@ export function building(b: Pick<WorldBuilding, 'key' | 'floors'>): { group: THR
       top = volume(g, s, s.w, s.d, n, 0, 0, 0);
   }
   roof(g, s, w, d, 0, s.shape === 'podium' ? -1 : 0, top);
-  // Its way in: a door and a canopy over it, on the avenue side.
+  // A canopy over its way in, on the avenue side (the door itself is its own, to be pointed at: see district).
   const front = (s.shape === 'podium' ? s.d + 4 : s.d) / 2;
-  box(g, '#2b2d42', 3.2, 3, 0.3, 0, 0, front + 0.1);
   box(g, s.trim, 5, 0.3, 2.4, 0, 3.4, front + 1.2);
   return { group: g, style: s, height: top + 9 };
 }
@@ -247,9 +252,13 @@ export function buildQuarter(ground: THREE.Group, colliders: Collider[]) {
   let here = { x: 0, z: 0 };
   let drop = 0;
   let mine: { c: Collider; base: Collider }[] = [];
+  const doors: Interactable[] = [];
+  /** Where each door is in the world. */
+  let doorsAt: { x: number; z: number }[] = [];
 
   const place = () => {
     for (const m of mine) Object.assign(m.c, { minX: m.base.minX - here.x, maxX: m.base.maxX - here.x, minZ: m.base.minZ - here.z, maxZ: m.base.maxZ - here.z, top: m.base.top - drop, bottom: (m.base.bottom ?? 0) - drop });
+    doors.forEach((d, i) => Object.assign(d, { x: doorsAt[i].x - here.x, z: doorsAt[i].z - here.z, y: G - drop }));
   };
   const add = (c: Collider) => {
     const live = { ...c };
@@ -295,6 +304,13 @@ export function buildQuarter(ground: THREE.Group, colliders: Collider[]) {
       signs.add(sign);
       const w = (style.shape === 'podium' ? style.w + 6 : style.w) / 2;
       add({ minX: at.x - w, maxX: at.x + w, minZ: at.z - front, maxZ: at.z + front, bottom: G, top: G + height });
+      // Its door, under the canopy: one of its own, not merged, so the aim lands on it (it's what you use).
+      const it: Interactable = { kind: 'gitlabdoor', x: 0, z: 0, y: G, radius: 2.4, gitlabBuilding: b.key };
+      doors.push(it);
+      doorsAt.push({ x: at.x, z: at.z + front + 1.4 });
+      const door = mesh(new THREE.BoxGeometry(3.2, 3, 0.3), toon('#2b2d42'), at.x, G + 1.5, at.z + front + 0.1);
+      door.userData.interact = it;
+      signs.add(door);
     }
     // The gate, on the avenue along the front of its first cell.
     const c = cellAt(d.cells[0]);
@@ -317,6 +333,8 @@ export function buildQuarter(ground: THREE.Group, colliders: Collider[]) {
       if (i >= 0) colliders.splice(i, 1);
     }
     mine = [];
+    doors.length = 0;
+    doorsAt = [];
     if (!state || !state.districts.length) return;
     root.add(lay(state));
     for (const d of state.districts) if (d.cells.length && d.cells[0] < CELLS) root.add(...district(d));
@@ -326,6 +344,7 @@ export function buildQuarter(ground: THREE.Group, colliders: Collider[]) {
   return {
     world: {
       set,
+      doors,
       setHere(at: { x: number; z: number }) {
         here = at;
         place();
