@@ -26,20 +26,66 @@ export interface MapDot {
   name?: string;
 }
 
+/** The map's extent, in the world's metres: north is -z. */
+export interface MapBounds {
+  west: number;
+  north: number;
+  east: number;
+  south: number;
+}
+
+/**
+ * Something else in the world, on the map too (the GitLab Quarter, say): how far it reaches, so the
+ * map takes it in (null: nothing to show), and drawing it, under you and everyone else.
+ */
+export interface MapLayer {
+  bounds(): MapBounds | null;
+  draw(svg: SVGSVGElement, el: (tag: string, attrs: Record<string, string | number>, text?: string) => SVGElement): void;
+}
+
+const layers: MapLayer[] = [];
+const changed = new Set<() => void>();
+
+/** Puts `layer` on the map (a feature's install does, once). */
+export function addMapLayer(layer: MapLayer) {
+  layers.push(layer);
+  mapChanged();
+}
+
+/** A layer changed: the minimap draws itself again (the whole map does whenever it opens). */
+export function mapChanged() {
+  for (const fn of changed) fn();
+}
+
+/** `fn` hears when a layer changes (see mapChanged). */
+export function onMapChanged(fn: () => void): () => void {
+  changed.add(fn);
+  return () => changed.delete(fn);
+}
+
 /** A drawn map: its picture, the whole of the campus's bounds, and moving you and the others about on it. */
 export interface CampusMap {
   svg: SVGSVGElement;
-  bounds: { west: number; north: number; east: number; south: number };
+  bounds: MapBounds;
   move(you: MapDot | null, others: readonly MapDot[]): void;
 }
 
 /** Draws the campus: the main street, the building you're in, the district's buildings; then you, and everyone else. */
 export function campusMap(state: CampusState): CampusMap {
   const n = state.buildings.length;
-  const west = Math.min(slotAt(0).x + FOOTPRINT.minX - 14, -80);
-  const east = -west;
-  const north = Math.min(districtEnd(Math.max(n, 1)), -60) - 6;
-  const south = ROAD.maxZ + 14;
+  let west = Math.min(slotAt(0).x + FOOTPRINT.minX - 14, -80);
+  let east = -west;
+  let north = Math.min(districtEnd(Math.max(n, 1)), -60) - 6;
+  let south = ROAD.maxZ + 14;
+  // Taking in whatever else is on the map.
+  for (const l of layers) {
+    const b = l.bounds();
+    if (!b) continue;
+    west = Math.min(west, b.west);
+    east = Math.max(east, b.east);
+    north = Math.min(north, b.north);
+    south = Math.max(south, b.south);
+  }
   const svg = el('svg', { viewBox: `${west} ${north} ${east - west} ${south - north}`, class: 'campus-map', role: 'img', 'aria-label': 'Map of the campus' }) as SVGSVGElement;
   const rect = (x: number, z: number, w: number, d: number, cls: string) => svg.append(el('rect', { x, y: z, width: w, height: d, class: cls }));
   const label = (x: number, z: number, text: string, cls = 'cm-label') => svg.append(el('text', { x, y: z, class: cls, 'text-anchor': 'middle' }, text));
@@ -66,6 +112,8 @@ export function campusMap(state: CampusState): CampusMap {
     label(at.x, at.z + 6, here ? 'you’re in this one' : b.floors ? `${b.floors} floor${b.floors === 1 ? '' : 's'}` : 'no floors yet', 'cm-sub');
     svg.append(el('circle', { cx: at.x + READER.x, cy: at.z + READER.z, r: 1.4, class: 'cm-reader' }));
   });
+
+  for (const l of layers) l.draw(svg, el);
 
   // Everyone else out on your floor's grounds, then you on top.
   const others = el('g', { class: 'cm-others' });
