@@ -12,6 +12,9 @@ export const meetingHandlers = {
     const who = c.peer.name;
     const floor = here(ctx, c);
     if (!floor) return;
+    // On a GitLab project's floor, your own role there says (see gitlab-access.ts).
+    const role = ctx.gitlabAccess.mayWork(c, floor.def);
+    if (role) return ctx.warn(c, role);
     if (msg.provider !== undefined && (!isAgentProvider(msg.provider) || !floor.project.agentProviders.includes(msg.provider))) {
       ctx.warn(c, 'Unknown agent provider');
       return;

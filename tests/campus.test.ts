@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { Accounts } from '../src/server/accounts.js';
-import { Campus } from '../src/server/campus.js';
+import { Campus, GITLAB_BUILDING } from '../src/server/campus.js';
 import { DISTRICT, DOOR, FOOTPRINT, READER, buildingAt, isOutdoors, slotAt } from '../src/shared/campus.js';
 import { EXIT_STAIRS, FLOOR, STREET_Y } from '../src/shared/layout.js';
 import { MAIN_BUILDING } from '../src/shared/protocol.js';
@@ -21,11 +21,26 @@ function office(...people: [id: string, name: string, role?: 'admin' | 'member']
 const ada = { accountId: 'ada000', admin: false };
 const bob = { accountId: 'bob000', admin: false };
 
-test('a floor is in its owner’s building while they have an account, else in the office’s own', () => {
+test('every floor is the office’s own, but a GitLab project’s, which is in its namespace’s building', () => {
   const { campus } = office(['ada000', 'Ada']);
-  assert.equal(campus.of({ owner: 'ada000' }), 'ada000');
+  // Accounts have no buildings of their own any more (see campus.ts): the GitLab Quarter is where projects stand.
+  assert.equal(campus.of({ owner: 'ada000' }), MAIN_BUILDING);
   assert.equal(campus.of({}), MAIN_BUILDING);
-  assert.equal(campus.of({ owner: 'gone00' }), MAIN_BUILDING);
+  assert.equal(campus.of({ gitlab: 'https://gl.example/genius/genius-lab/skynet' }), `${GITLAB_BUILDING}genius/genius-lab`);
+  assert.equal(campus.of({ gitlab: 'https://gl.example/qa/afulabot' }), `${GITLAB_BUILDING}qa`);
+});
+
+test('a GitLab building’s door is open, and each of its floors is up to the floor gate', () => {
+  const { campus } = office(['ada000', 'Ada'], ['bob000', 'Bob']);
+  const skynet = { gitlab: 'https://gl.example/genius/genius-lab/skynet', gitlabProjectId: 7 };
+  assert.ok(campus.mayEnter(bob, campus.of(skynet)));
+  // No gate: anyone in. A gate (their GitLab access): only who it lets.
+  assert.ok(campus.mayEnterFloor(bob, skynet));
+  campus.floorGate = (who, floor) => !floor.gitlab || who.accountId === 'ada000';
+  assert.ok(campus.mayEnterFloor(ada, skynet));
+  assert.ok(!campus.mayEnterFloor(bob, skynet));
+  // The office's own floors aren't the gate's to keep.
+  assert.ok(campus.mayEnterFloor(bob, {}));
 });
 
 test('your card opens your own building, the office’s, and anyone’s whose guest list you’re on', () => {
@@ -55,45 +70,33 @@ test('the guest lists are kept across a restart', () => {
   assert.deepEqual(again.guestsOf('ada000'), [{ id: 'bob000', name: 'Bob' }]);
 });
 
-test('what you see of the campus: every building where it stands, which open to you, their bottom floors, and your guest list', () => {
+test('what you see of the campus: the office’s own building, and where each open floor is up it', () => {
   const { campus } = office(['ada000', 'Ada'], ['bob000', 'Bob']);
-  const defs = [{ owner: 'ada000' }, { owner: 'ada000' }, {}];
+  const defs = [{ owner: 'ada000' }, {}, { gitlab: 'https://gl.example/g/sub/app' }];
   const open = [
     { id: 'ada-api', owner: 'ada000' },
     { id: 'lobby', owner: undefined },
-    { id: 'ada-web', owner: 'ada000' },
+    { id: 'app', gitlab: 'https://gl.example/g/sub/app' },
   ];
-  const s = campus.state(bob, 'bob000', defs, open);
+  const s = campus.state(bob, MAIN_BUILDING, defs, open);
   assert.deepEqual(
     s.buildings.map((b) => [b.id, b.name, b.floors, b.access, b.mine, b.bottom]),
-    [
-      [MAIN_BUILDING, 'the office', 1, true, false, 'lobby'],
-      ['ada000', 'Ada', 2, false, false, undefined],
-      ['bob000', 'Bob', 0, true, true, undefined],
-    ],
+    [[MAIN_BUILDING, 'the office', 2, true, false, 'ada-api']],
   );
-  // Which building each open floor is in, and how far up it.
-  assert.deepEqual(s.floors, { 'ada-api': ['ada000', 0], lobby: [MAIN_BUILDING, 0], 'ada-web': ['ada000', 1] });
-  assert.equal(s.here, 'bob000');
-  assert.deepEqual(s.guests, []);
-  assert.deepEqual(s.people, [{ id: 'ada000', name: 'Ada' }]);
-  // The office's own building is always first, on the main street.
-  assert.deepEqual(campus.ids(), [MAIN_BUILDING, 'ada000', 'bob000']);
-  // A guest sees the bottom floor its door opens onto.
-  campus.invite('ada000', 'bob000');
-  assert.equal(campus.state(bob, 'bob000', defs, open).buildings[1].bottom, 'ada-api');
-  // The shared password has no building, so no guest list.
-  assert.equal(campus.state({ admin: true }, MAIN_BUILDING, defs).guests, undefined);
+  // A GitLab project's floor is the first of its own building.
+  assert.deepEqual(s.floors, { 'ada-api': [MAIN_BUILDING, 0], lobby: [MAIN_BUILDING, 1], app: [`${GITLAB_BUILDING}g/sub`, 0] });
+  assert.deepEqual(campus.ids(), [MAIN_BUILDING]);
+  // On a GitLab floor, the world round you is drawn where the office's is.
+  assert.equal(campus.state(bob, `${GITLAB_BUILDING}g/sub`, defs, open).here, MAIN_BUILDING);
 });
 
-test('where you are on the campus: your floor’s building, else the last one you were in, else your own', () => {
+test('where you are on the campus: your floor’s building, else the last one you were in, else the office’s', () => {
   const { campus } = office(['ada000', 'Ada']);
-  assert.equal(campus.here('c1', ada, undefined), 'ada000');
-  assert.equal(campus.here('c1', ada, {}), MAIN_BUILDING);
   assert.equal(campus.here('c1', ada, undefined), MAIN_BUILDING);
+  assert.equal(campus.here('c1', ada, { gitlab: 'https://gl.example/g/app' }), `${GITLAB_BUILDING}g`);
+  assert.equal(campus.here('c1', ada, undefined), `${GITLAB_BUILDING}g`);
   campus.forget('c1');
-  assert.equal(campus.here('c1', ada, undefined), 'ada000');
-  assert.equal(campus.here('c2', { admin: true }, undefined), MAIN_BUILDING);
+  assert.equal(campus.here('c1', ada, undefined), MAIN_BUILDING);
 });
 
 test('every building stands where the campus has it: the office’s on the main street, the rest five to a row, clear of each other', () => {

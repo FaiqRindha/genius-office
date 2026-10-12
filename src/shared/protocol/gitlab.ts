@@ -1,4 +1,5 @@
 // Your own GitLab sign-in, for a self-hosted GitLab (see server/gitlab.ts). Accounts only.
+import type { WorldState } from '../gitlab-world.js';
 
 /** Your GitLab sign-in, as the office sees it. */
 export interface GitLabState {
@@ -30,11 +31,23 @@ export type GitLabClientMsg =
   /** The projects your GitLab sign-in can see; answered with `gitlab.projects`. */
   | { t: 'gitlab.projects'; refresh?: boolean }
   /** Clone a project from your GitLab and make it a new floor; answered with `gitlab.added` once it's there. */
-  | { t: 'gitlab.add'; path: string };
+  | { t: 'gitlab.add'; path: string }
+  /** The GitLab world (every project, as districts, buildings and floors); answered with `gitlab.world`. */
+  | { t: 'gitlab.world' }
+  /** Your role in each of the GitLab's projects; answered with `gitlab.access`. */
+  | { t: 'gitlab.access' }
+  /** Go onto project `projectId`'s floor (cloned first if it isn't yet); answered with `gitlab.entered`. */
+  | { t: 'gitlab.enter'; projectId: number };
 
 export type GitLabServerMsg =
   /** Your GitLab sign-in, whenever it changes (accounts only). */
   | { t: 'gitlab'; state: GitLabState }
   | { t: 'gitlab.projects'; projects: GitLabProject[]; error?: string }
   /** The floor for the project at `path` is there, or why there's none. */
-  | { t: 'gitlab.added'; path: string; floor?: string; error?: string };
+  | { t: 'gitlab.added'; path: string; floor?: string; error?: string }
+  /** The GitLab world, when asked and to everyone whenever it changes; null before anyone's signed in to a GitLab. */
+  | { t: 'gitlab.world'; state: WorldState | null }
+  /** Your role (GitLab access level: 10 Guest … 50 Owner) in each project you're a member of, by id. */
+  | { t: 'gitlab.access'; levels: Record<number, number> }
+  /** Project `projectId`'s floor to ride to, or why not. */
+  | { t: 'gitlab.entered'; projectId: number; floor?: string; error?: string };

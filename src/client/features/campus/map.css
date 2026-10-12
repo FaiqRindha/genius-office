@@ -80,3 +80,7 @@
     height: 120px;
   }
 }
+.campus-map .cm-gl-building { stroke: #2b2d42; stroke-width: 0.8; }
+.campus-map .cm-gl-name { font: 800 4.2px Nunito, ui-rounded, system-ui, sans-serif; fill: #2b2d42; paint-order: stroke; stroke: #fffaf3; stroke-width: 1px; }
+.campus-map .cm-gl-district { font: 900 9px Nunito, ui-rounded, system-ui, sans-serif; fill: #2b2d42; paint-order: stroke; stroke: #fffaf3; stroke-width: 2px; }
+.campus-map .cm-gl-road { font-size: 6px; }

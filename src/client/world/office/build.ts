@@ -13,6 +13,7 @@ import { cabinet } from '../../features/cabinet/world';
 import { whiteboard } from '../../features/whiteboard/world';
 import { green, tee } from '../../features/golf/world';
 import { campus } from '../../features/campus/world';
+import { gitlabQuarter } from '../../features/gitlab-world/world';
 import { stack } from '../stack';
 import { tower } from '../tower';
 import { hoop } from '../../features/basketball/world';
@@ -46,7 +47,7 @@ function floorPlan() {
     walls,
     balcony,
     tee,
-    ...downstairs(cars, inWorld(street), inWorld(green), inWorld(scenic), inWorld(campus)),
+    ...downstairs(cars, inWorld(street), inWorld(green), inWorld(scenic), inWorld(campus), inWorld(gitlabQuarter)),
     plug,
     tower,
     desks,

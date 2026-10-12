@@ -2,6 +2,8 @@ import path from 'node:path';
 import { childEnv, resolveCommand } from '../workers.js';
 import { SignIns } from '../signins.js';
 import { GitLabSignIns } from '../gitlab.js';
+import { GitLabWorld } from '../gitlab-world.js';
+import { GitLabAccess, ROLE } from '../gitlab-access.js';
 import { agentProviders, configuredProvider } from '../agents.js';
 import { Tailnet } from '../tailnet.js';
 import { Team } from '../team.js';
@@ -64,7 +66,34 @@ export function createServices(ctx: Ctx): BuildingServices {
   // And their own self-hosted GitLab, next to them (see gitlab.ts).
   const gitlab = new GitLabSignIns(cfg.dataDir, (id) => {
     for (const c of clients.values()) if (c.accountId === id && !c.out) ctx.sendTo(c, { t: 'gitlab', state: gitlab.state(id) });
+    // Someone signed in, out or as someone else (not just looked at again): the world is what everyone's
+    // tokens see, and their roles are someone else's.
+    const c = gitlab.creds(id);
+    const now = c ? `${c.url}|${c.token}` : '';
+    if ((signedAs.get(id) ?? '') === now) return;
+    signedAs.set(id, now);
+    gitlabWorld.poke();
+    gitlabAccess.forget(id);
   });
+  /** What each account was last signed in to GitLab with, to tell a new sign-in from a look at the old one. */
+  const signedAs = new Map<string, string>();
+  for (const e of gitlab.everyone()) signedAs.set(e.account, `${e.url}|${e.token}`);
+  // Who may go onto which of its floors: their own GitLab membership (see gitlab-access.ts).
+  const gitlabAccess = new GitLabAccess(
+    (id) => gitlab.creds(id),
+    (id) => {
+      for (const c of clients.values()) if (c.accountId === id && !c.out) ctx.sendTo(c, { t: 'gitlab.access', levels: gitlabAccess.levels(id) });
+    },
+  );
+  gitlabAccess.projectOf = (floor) => floor.gitlabProjectId ?? (floor.gitlab ? gitlabWorld.projectAt(floor.gitlab)?.id : undefined);
+  ctx.campus.floorGate = (who, floor) => {
+    if (!floor.gitlab || !who.accountId) return true;
+    const id = gitlabAccess.projectOf!(floor);
+    return id !== undefined && (gitlabAccess.level(who.accountId, id) ?? 0) >= ROLE.guest;
+  };
+  // Every project on that GitLab, standing in the city (see gitlab-world.ts).
+  const gitlabWorld = new GitLabWorld(cfg.dataDir, () => gitlab.everyone(), (state) => ctx.broadcast({ t: 'gitlab.world', state }, undefined, true));
+  gitlabWorld.start();
   // Accounts revoked from the terminal while the office was closed leave their sign-ins behind.
   if (!accounts.unreadableFile) signins.prune(new Set(accounts.state(new Set()).accounts.map((a) => a.id)));
 
@@ -130,7 +159,7 @@ export function createServices(ctx: Ctx): BuildingServices {
     });
   };
 
-  return { sky, themes, maps, prompts, leaveOnMerge, ledger, signins, gitlab, limits, accountLimits, webhook, machine, limitsOf, pumpQueues };
+  return { sky, themes, maps, prompts, leaveOnMerge, ledger, signins, gitlab, gitlabWorld, gitlabAccess, limits, accountLimits, webhook, machine, limitsOf, pumpQueues };
 }
 
 /** What's made once the floors are open: the SSH team, the tailnet, workers' web servers, pictures and upgrades. */

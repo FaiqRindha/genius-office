@@ -20,6 +20,9 @@ export const workerHandlers = {
     const who = c.peer.name;
     const floor = here(ctx, c);
     if (!floor) return;
+    // On a GitLab project's floor, your own role there says (see gitlab-access.ts).
+    const role = ctx.gitlabAccess.mayWork(c, floor.def);
+    if (role) return ctx.warn(c, role);
     const kind = msg.kind === 'shell' ? 'shell' : 'agent';
     if (kind === 'agent' && msg.provider !== undefined && (!isAgentProvider(msg.provider) || !floor.project.agentProviders.includes(msg.provider))) {
       ctx.warn(c, 'Unknown agent provider');
@@ -32,7 +35,7 @@ export const workerHandlers = {
     for (const id of Array.isArray(msg.repos) ? [...new Set(msg.repos.slice(0, MAX_REPOS + 1).map((x) => str(x, 64)))] : []) {
       const found = ctx.floors.get(id);
       // Only projects in buildings your card opens.
-      const other = found && ctx.campus.mayEnter(c, ctx.campus.of(found.def)) ? found : undefined;
+      const other = found && ctx.campus.mayEnterFloor(c, found.def) ? found : undefined;
       if (!other || other === floor) return ctx.warn(c, other ? "The worker's own floor's project is already in its workspace" : 'That project is no longer in the building');
       repos.push({ floor: other.id, name: other.def.name, repo: other.def.repo, dir: other.dir });
     }

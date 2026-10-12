@@ -1,4 +1,5 @@
 import { FARM, LAKE, LOOP_PAVED, MOUNTAINS, shoreX } from '../../../shared/scenic';
+import { inQuarter } from '../../../shared/gitlab-quarter';
 import { neighbourBoxes } from '../outside';
 import { AUTUMN, LEAVES, PINES, boulder, leafy, palm, pine } from './flora';
 import { G, beside, inBox, indexAt, insideLoop, nearest, stretch, type ScenicKit } from './kit';
@@ -7,7 +8,8 @@ import { G, beside, inBox, indexAt, insideLoop, nearest, stretch, type ScenicKit
 export function plantTrees(kit: ScenicKit) {
   const { rand, parts, colliders, trunk, taken, free } = kit;
   const neighbours = neighbourBoxes();
-  const town = (x: number, z: number) => (Math.abs(x) < 64 && z > -64 && z < 40) || (x > -24 && x < 14 && z > 30 && z < 72) || neighbours.some((b) => inBox(b, x, z, 5));
+  // The town, and the GitLab Quarter up north with the path to it.
+  const town = (x: number, z: number) => inQuarter(x, z) || (Math.abs(x) < 64 && z > -64 && z < 40) || (x > -24 && x < 14 && z > 30 && z < 72) || neighbours.some((b) => inBox(b, x, z, 5));
   const ok = (x: number, z: number, r: number) => free(x, z, r) && !town(x, z) && x > shoreX(z) + 26 && !MOUNTAINS.some(([mx, mz, mr]) => Math.hypot(mx - x, mz - z) < mr * 0.95);
   // The pines: thick right up to the road, thinning out further off, with a leafy tree here and there.
   for (let x = 110; x < 320; x += 5.5) {

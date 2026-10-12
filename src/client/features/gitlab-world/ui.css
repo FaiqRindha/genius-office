@@ -1,0 +1,20 @@
+/* A GitLab Quarter building's door: its floors, a project each. */
+.modal.gl-door { width: min(560px, 100%); }
+.gl-door .note { margin: 0 0 10px; font-size: 13px; font-weight: 700; color: var(--muted); }
+.gl-door .note.busy { color: var(--ink); margin-top: 10px; }
+.gl-door .err { margin: 10px 0 0; font-weight: 800; color: var(--bad); }
+.gl-floors { display: grid; gap: 8px; max-height: 55vh; overflow: auto; }
+.gl-floor { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; width: 100%; text-align: left; padding: 8px 12px; font: inherit; color: var(--ink); background: #fff; border: 3px solid var(--ink); border-radius: 14px; box-shadow: 0 3px 0 var(--ink); cursor: pointer; }
+.gl-floor:hover:not(:disabled) { background: var(--paper-2); }
+.gl-floor:disabled { cursor: default; }
+.gl-floor.locked { background: #eceff1; color: #6c757d; box-shadow: none; }
+.gl-no { width: 32px; height: 32px; border-radius: 50%; border: 3px solid var(--ink); display: grid; place-items: center; font-weight: 900; background: #fca311; color: #fff; }
+.gl-floor.locked .gl-no { background: #adb5bd; }
+.gl-text { display: flex; flex-direction: column; min-width: 0; }
+.gl-name { font-weight: 900; display: flex; gap: 8px; align-items: baseline; }
+.gl-path { font-size: 12px; font-weight: 700; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gl-tag { font-size: 11px; font-weight: 800; color: var(--muted); }
+.gl-role { font-size: 12px; font-weight: 900; padding: 3px 8px; border-radius: 999px; border: 2px solid var(--ink); white-space: nowrap; }
+.gl-role.dev { background: #b7efc5; }
+.gl-role.read { background: #ffe5a3; }
+.gl-role.none { background: #e9ecef; color: #6c757d; }

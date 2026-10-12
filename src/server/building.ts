@@ -23,6 +23,8 @@ export interface FloorDef {
   gitlab?: string;
   /** The account that added a GitLab floor, whose sign-in reads its boards first. */
   gitlabAccount?: string;
+  /** Its project's id on the GitLab (see gitlab-world.ts): who may go onto it is by that. */
+  gitlabProjectId?: number;
   dir: string;
   palette: number;
   addedBy: string;
@@ -346,7 +348,7 @@ export class Building {
     // inside another (a GitLab may have group/app and group/app/tool both).
     const parts = src.path.split('/');
     const dest = path.join(this.projectsDir, src.host.replace(/:/g, '_'), parts.slice(0, -1).join('.'), parts[parts.length - 1]);
-    const def: FloorDef = { ...this.newDef(src.name, undefined, dest, by, account), gitlab: src.url, ...(account ? { gitlabAccount: account } : {}) };
+    const def: FloorDef = { ...this.newDef(src.name, undefined, dest, by, account), gitlab: src.url, ...(account ? { gitlabAccount: account } : {}), ...(src.id ? { gitlabProjectId: src.id } : {}) };
     return this.begin(def, { owner: account, empty: src.empty, git: { url: src.cloneUrl, env, host: src.host } }, started);
   }
 
@@ -454,7 +456,7 @@ export class Building {
           id: s.id,
           name: typeof s.name === 'string' && s.name ? s.name.slice(0, 100) : path.basename(s.dir),
           repo: normalizeRepo(s.repo),
-          ...(floorGitLab(s.gitlab) ? { gitlab: floorGitLab(s.gitlab), ...(gitlabAccount ? { gitlabAccount } : {}) } : {}),
+          ...(floorGitLab(s.gitlab) ? { gitlab: floorGitLab(s.gitlab), ...(gitlabAccount ? { gitlabAccount } : {}), ...(Number.isSafeInteger(s.gitlabProjectId) ? { gitlabProjectId: s.gitlabProjectId } : {}) } : {}),
           dir: s.dir,
           palette: Number.isInteger(s.palette) && (s.palette as number) >= 0 ? (s.palette as number) : 0,
           addedBy: typeof s.addedBy === 'string' ? s.addedBy : '?',
