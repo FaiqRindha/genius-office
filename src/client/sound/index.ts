@@ -22,6 +22,7 @@ import { Dj, hiccup, pour } from '../features/bar/sound';
 import { carDoor, crash, honk, Motors, type Engine } from '../features/cars/sound';
 import { bonk, hatch, poleLanding, rung, slide, twirl } from '../features/climbing/sound';
 import { coffee } from '../features/coffee/sound';
+import { cardReader } from '../features/campus/sound';
 import { AudioCore, type Hall, type Listener } from './core';
 import { bark, yip } from '../features/dog/sound';
 import { airlock, cellDoor, thud } from '../features/workers/sound';
@@ -262,6 +263,11 @@ export class OfficeSound {
 
   gong(why: GongWhy) {
     gong(this.a, why);
+  }
+
+  /** Your ID card on a reader: it opened (`ok`), or it didn't. */
+  cardReader(ok: boolean) {
+    cardReader(this.a, ok);
   }
 
   ding(kind: 'done' | 'needs_input') {

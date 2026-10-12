@@ -42,17 +42,20 @@ export interface RemotePeer {
 }
 
 /** Registers what follows the people in the office (store 'peers' and 'cars'), their ticks, and chat and peer.act. */
-export function installPeers(ctx: Ctx, core: CoreState, parts: Pick<Parts, 'puff' | 'worlds' | 'cars' | 'walking' | 'talk' | 'hud'>) {
+export function installPeers(ctx: Ctx, core: CoreState, parts: Pick<Parts, 'puff' | 'worlds' | 'cars' | 'walking' | 'talk' | 'hud' | 'campus'>) {
   const { scene, voice, sound, player, office } = ctx;
   const { plan, inOffice } = parts.worlds;
   const remotes = new Map<string, RemotePeer>();
   const editProfile = () => parts.hud.editProfile();
   const walkTo = (id: string) => parts.walking.walkTo(id);
 
+  /** Who's on your floor, or out on the grounds from anywhere on the campus (see features/campus): where they are, if you can see them. */
+  const seen = (peer: PeerInfo) => store.onMyFloor(peer) || !!parts.campus?.outdoorAt(peer);
+
   function syncPeers() {
     for (const [id, peer] of store.peers) {
-      // Only who's on your floor is in the room with you, and not someone on the 2D view: they're not standing anywhere.
-      if (id === store.you || !store.onMyFloor(peer) || peer.lite) continue;
+      // Only who's in the room with you or out on the grounds, and not someone on the 2D view: they're not standing anywhere.
+      if (id === store.you || !seen(peer) || peer.lite) continue;
       let r = remotes.get(id);
       if (!r) {
         const person = new Person(peer.name, peer.color, peer.look);
@@ -87,7 +90,7 @@ export function installPeers(ctx: Ctx, core: CoreState, parts: Pick<Parts, 'puff
     }
     for (const [id, r] of remotes) {
       const peer = store.peers.get(id);
-      if (!peer || !store.onMyFloor(peer) || peer.lite) {
+      if (!peer || !seen(peer) || peer.lite) {
         scene.remove(r.person.root);
         remotes.delete(id);
       }
@@ -99,14 +102,30 @@ export function installPeers(ctx: Ctx, core: CoreState, parts: Pick<Parts, 'puff
   // Into a car or out of one: sitting in it, or back on their feet.
   store.on('cars', syncPeers);
 
+  // Someone from another floor stepping out onto the grounds says so only by walking: look now and then.
+  let lookedOut = 0;
   ctx.ticks.add('others', ({ dt, t, now }) => {
+    if (now - lookedOut > 500) {
+      lookedOut = now;
+      for (const [id, p] of store.peers) {
+        if (id !== store.you && !p.lite && !remotes.has(id) && seen(p)) {
+          syncPeers();
+          break;
+        }
+      }
+    }
     for (const [id, r] of remotes) {
       const p = store.peers.get(id);
       if (!p) continue;
       // Sitting, they're wherever their seat puts them; in a car, right in it as it goes.
       const ride = parts.cars.rideOf(id);
       const sat = ride ?? (p.seat ? seatOn(plan(), p.seat) : undefined);
-      const at = sat ?? p;
+      // Someone off your floor is seen only out on the grounds, where they are on your floor's map.
+      const mine = store.onMyFloor(p);
+      const out = mine ? null : (parts.campus?.outdoorAt(p) ?? null);
+      r.person.root.visible = mine || !!out;
+      if (!mine && !out) continue;
+      const at = out ?? sat ?? p;
       r.target.set(at.x, at.y, at.z);
       const pos = r.person.root.position;
       const fromX = pos.x;
@@ -121,10 +140,10 @@ export function installPeers(ctx: Ctx, core: CoreState, parts: Pick<Parts, 'puff
         r.person.root.rotation.y += diff * Math.min(1, dt * 12);
       }
       // On their feet if they're standing on something: the floor, a desk, a stair, the loft.
-      const ground = groundAt(player.colliders, p.x, p.z, p.y);
-      const airborne = !sat && p.y > ground + 0.05;
+      const ground = groundAt(player.colliders, at.x, at.z, at.y);
+      const airborne = !sat && at.y > ground + 0.05;
       // Or holding on to the ladder or a pole; off a pole onto the mat, the firehouse bell rings.
-      const holding = sat || core.upTop || !inOffice() ? null : gripOf(p, office.stack.poles(), ground);
+      const holding = sat || out || core.upTop || !inOffice() ? null : gripOf(p, office.stack.poles(), ground);
       if (r.grip === 'pole' && !holding && Math.abs(p.y) < 0.2) sound.poleLanding(6, { x: pos.x, y: 0.5, z: pos.z });
       r.grip = holding;
       r.person.setGrip(holding);

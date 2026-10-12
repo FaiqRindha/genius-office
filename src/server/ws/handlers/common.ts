@@ -11,9 +11,9 @@ export const here = (ctx: Ctx, c: Client): Floor | undefined => {
   return f;
 };
 
-/** A worker by id, with the floor it sits on. */
-export const workerOf = (ctx: Ctx, id: unknown) => {
+/** A worker by id, with the floor it sits on: one in a building `c`'s card opens (see campus.ts). */
+export const workerOf = (ctx: Ctx, id: unknown, c: Client) => {
   const wid = str(id, 32);
   const floor = ctx.workerFloor(wid);
-  return floor ? { wid, floor, info: floor.workers.get(wid)! } : undefined;
+  return floor && ctx.campus.mayEnter(c, ctx.campus.of(floor.def)) ? { wid, floor, info: floor.workers.get(wid)! } : undefined;
 };

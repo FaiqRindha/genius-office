@@ -92,7 +92,7 @@ export function cloneHere(repo: string, dest: string): Promise<string | undefine
   });
 }
 
-export async function listRepos(cwd: string): Promise<RepoChoice[]> {
+export async function listRepos(cwd: string, env?: Record<string, string>): Promise<RepoChoice[]> {
   const out = await gh(
     [
       'api',
@@ -103,6 +103,7 @@ export async function listRepos(cwd: string): Promise<RepoChoice[]> {
     ],
     cwd,
     90_000,
+    env,
   );
   const repos: RepoChoice[] = [];
   const seen = new Set<string>();

@@ -4,6 +4,7 @@ import type { ClientMsg } from '../../../shared/protocol.js';
 import { accountsHandlers } from './accounts.js';
 import { ballHandlers, ballHooks, ballView } from './ball.js';
 import { cabinetHandlers, cabinetHooks, cabinetView } from './cabinet.js';
+import { campusHandlers } from './campus.js';
 import { carHandlers, carHooks, carsView } from './car.js';
 import { changesHandlers, changesHooks } from './changes.js';
 import { decorHandlers, decorView } from './decor.js';
@@ -30,6 +31,7 @@ export const handlers: HandlerMap<ClientMsg> = {
   ...accountsHandlers,
   ...ballHandlers,
   ...cabinetHandlers,
+  ...campusHandlers,
   ...carHandlers,
   ...changesHandlers,
   ...decorHandlers,

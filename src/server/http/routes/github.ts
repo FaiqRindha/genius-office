@@ -9,7 +9,7 @@ export const githubRoutes = {
     prefix: '/api/gh/',
     auth: 'session',
     async handle(ctx, { res, url, path: p, session }) {
-      const floor = floorParam(ctx, url);
+      const floor = floorParam(ctx, url, session);
       // What the issue and PR windows show beyond the board cards (see github.ts).
       const n = Number(url.searchParams.get('number'));
       // The repo's labels (for the label picker) are the one thing not about a single issue or PR.
