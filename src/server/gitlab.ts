@@ -1,6 +1,7 @@
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import type { GitLabState } from '../shared/protocol.js';
+import type { GitLabProject, GitLabState } from '../shared/protocol.js';
+import { listProjects as askProjects } from './gitlab-projects.js';
 import type { RunAs } from './workers/types.js';
 
 /*
@@ -22,6 +23,8 @@ const GITLAB_VARS = ['GITLAB_TOKEN', 'GITLAB_ACCESS_TOKEN', 'OAUTH_TOKEN', 'GITL
 const TOKEN = /^[A-Za-z0-9_.-]{16,512}$/;
 const ACCOUNT_ID = /^[A-Za-z0-9]{6,64}$/;
 const LOOK_GAP_MS = 60_000;
+/** How long the projects someone's GitLab can see are reused before it's asked again. */
+const PROJECTS_TTL_MS = 5 * 60_000;
 const LOOK_TIMEOUT_MS = 15_000;
 /** git asks it for a password for the GitLab, and it answers with the token in the worker's environment. */
 const CREDENTIAL_HELPER = `!f() { test "$1" = get && printf 'username=oauth2\\npassword=%s\\n' "$GITLAB_TOKEN"; }; f`;
@@ -66,17 +69,40 @@ export const whoAmI: GitLabWhoAmI = async (url, token) => {
 export class GitLabSignIns {
   private homes: string;
   private live = new Map<string, { state: GitLabState; lookedAt: number; looking?: Promise<void> }>();
+  private projectCache = new Map<string, { at: number; token: string; projects: Promise<GitLabProject[]> }>();
 
   constructor(
     dataDir: string,
     private onChange: (accountId: string) => void,
     private ask: GitLabWhoAmI = whoAmI,
+    private listProjects: typeof askProjects = askProjects,
   ) {
     this.homes = path.join(dataDir, 'homes');
   }
 
   state(id: string): GitLabState {
     return this.get(id).state;
+  }
+
+  /** The GitLab `id` is signed in to, and its token; undefined when they aren't. */
+  creds(id: string): { url: string; token: string } | undefined {
+    const s = this.load(id);
+    return s && { url: s.url, token: s.token };
+  }
+
+  /** The projects `id`'s GitLab sign-in can see, most recently active first (asked afresh with `refresh`). */
+  projects(id: string, refresh = false): Promise<GitLabProject[]> {
+    const s = this.load(id);
+    if (!s) return Promise.reject(new Error('Sign in to GitLab first (☰ → 🔐 Your sign-ins)'));
+    const cached = this.projectCache.get(id);
+    if (cached && !refresh && cached.token === s.token && Date.now() - cached.at < PROJECTS_TTL_MS) return cached.projects;
+    const projects = this.listProjects(s.url, s.token);
+    this.projectCache.set(id, { at: Date.now(), token: s.token, projects });
+    // A failure is worth asking again next time, not keeping for five minutes.
+    projects.catch(() => {
+      if (this.projectCache.get(id)?.projects === projects) this.projectCache.delete(id);
+    });
+    return projects;
   }
 
   /** Looks at whether `id`'s token still works, now if `force`, else unless it just did. */
@@ -129,6 +155,7 @@ export class GitLabSignIns {
 
   signOut(id: string) {
     this.save(id, undefined);
+    this.projectCache.delete(id);
     this.get(id).state = { status: 'none' };
     this.onChange(id);
   }

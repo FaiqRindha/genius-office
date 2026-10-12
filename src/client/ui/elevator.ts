@@ -6,6 +6,7 @@ import type { Net } from '../net';
 import { store } from '../state';
 import { h, openModal, timeAgo, toast, type Modal } from './dom';
 import { confirmDialog } from './prompt';
+import { addsFromGitLab, gitlabAdder, gitlabLabel, type GitLabAdder } from './elevator-gitlab';
 
 // The elevator's panel: a button for every floor (every project), and "add a project", which clones
 // one of the repositories the office's gh login can see and makes it a new floor. The first time
@@ -73,6 +74,8 @@ export function openElevator(opts: ElevatorOptions): void {
   let showAdd = setup || !store.floors.length;
   /** The search box and list are in place (rebuilding them would lose the focus mid-typing). */
   let built = false;
+  /** Adding from your GitLab instead, while you're signed in to one. */
+  let gitlab: GitLabAdder | null = null;
 
   const floorsEl = h('div.floors');
   const addEl = h('div.add');
@@ -108,6 +111,7 @@ export function openElevator(opts: ElevatorOptions): void {
   });
 
   const needRepos = () => {
+    if (addsFromGitLab()) return;
     const r = store.repos;
     if (r.loading || (r.at && Date.now() - r.at < REPOS_STALE_MS && !r.error)) return;
     store.repos = { ...r, loading: true };
@@ -138,7 +142,7 @@ export function openElevator(opts: ElevatorOptions): void {
         'span.floor-text',
         {},
         h('span.floor-name', {}, f.name, here ? h('span.here-tag', {}, 'you are here') : mine ? h('span.here-tag', {}, 'your floor') : null),
-        h('span.floor-sub', {}, [f.repo ?? f.dir, f.cloning ? f.clone?.detail : ''].filter(Boolean).join(' · ')),
+        h('span.floor-sub', {}, [f.repo ?? gitlabLabel(f.gitlab) ?? f.dir, f.cloning ? f.clone?.detail : ''].filter(Boolean).join(' · ')),
         f.cloning ? cloneBar(f.clone) : null,
       ),
       h('span.floor-stats', {}, ...stats.flatMap((s, j) => (j ? [' ', s] : [s]))),
@@ -266,6 +270,19 @@ export function openElevator(opts: ElevatorOptions): void {
       addEl.replaceChildren(open);
       addBtn.classList.add('hidden');
       return;
+    }
+    // One of GitHub and GitLab: whichever you're signed in to.
+    if (addsFromGitLab()) {
+      gitlab ??= gitlabAdder(net, (floor) => (modal.close(), opts.ride(floor)), setup);
+      if (addEl.firstChild !== gitlab.el) addEl.replaceChildren(gitlab.el);
+      addBtn.classList.add('hidden');
+      built = false;
+      return;
+    }
+    if (gitlab) {
+      gitlab.dispose();
+      gitlab = null;
+      needRepos();
     }
     addBtn.classList.remove('hidden');
     const r = store.repos;
@@ -400,7 +417,7 @@ export function openElevator(opts: ElevatorOptions): void {
     h('div.body', {}, intro, floorsEl, addEl),
     h('footer', {}, h('span.grow', {}, setup ? 'Your office, one floor per project · Esc to look around first' : 'Pick a floor · Esc to stay here'), addBtn),
   );
-  const unsubs = [store.on('floors', () => (checkAdding(), renderFloors(), renderAdd())), store.on('repos', renderAdd), store.on('projectsDir', () => (editDir(false), renderAdd())), store.on('floor', renderFloors), store.on('peers', renderFloors), store.on('me', () => (renderFloors(), renderAdd()))];
+  const unsubs = [store.on('floors', () => (checkAdding(), renderFloors(), renderAdd())), store.on('repos', renderAdd), store.on('projectsDir', () => (editDir(false), renderAdd())), store.on('floor', renderFloors), store.on('peers', renderFloors), store.on('me', () => (renderFloors(), renderAdd())), store.on('gitlab', renderAdd)];
   const modal = openModal(el, {
     doing: '🛗 at the elevator',
     // A stray click shouldn't lose the first-run panel; ✕ and Esc still close it.
@@ -409,6 +426,7 @@ export function openElevator(opts: ElevatorOptions): void {
       current = null;
       clearTimeout(startTimer);
       addedWaiters.delete(onAdded);
+      gitlab?.dispose();
       for (const off of unsubs) off();
     },
   });

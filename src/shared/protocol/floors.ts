@@ -36,6 +36,8 @@ export interface FloorInfo {
   name: string;
   /** owner/name on GitHub. */
   repo?: string;
+  /** Or its project's page on a self-hosted GitLab: https://gitlab.example.com/group/project */
+  gitlab?: string;
   /** Its checkout on the office's machine. */
   dir: string;
   /** The branch that checkout is on ('HEAD' when detached); none when it isn't a git checkout. */

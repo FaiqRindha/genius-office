@@ -1,0 +1,2 @@
+/* The elevator's "add a project" from a GitLab: its own Add button under the list. */
+.elevator .gitlab-add { display: flex; justify-content: flex-end; margin-top: 10px; }

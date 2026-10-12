@@ -3,7 +3,7 @@ import { closeSync, fstatSync, openSync, readSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import type { CloneProgress } from '../shared/protocol.js';
 
-// One `gh repo clone`, run so the office can see how it's getting on. git's progress goes to a log
+// One `gh repo clone` (or `git clone`, for a GitLab), run so the office can see how it's getting on. git's progress goes to a log
 // file, which the office reads every second: that says how far along it is, and a log that stops
 // growing is a clone that's stuck. The clone runs in its own session with no terminal, so an ssh
 // host-key question or a password prompt fails it straight away instead of waiting, unseen, on the
@@ -18,9 +18,9 @@ const TAIL_BYTES = 16 * 1024;
 
 /** What git says it's doing, in words for the elevator. */
 const STEPS: Record<string, string> = {
-  'Enumerating objects': 'GitHub is packing it up',
-  'Counting objects': 'GitHub is packing it up',
-  'Compressing objects': 'GitHub is packing it up',
+  'Enumerating objects': '<host> is packing it up',
+  'Counting objects': '<host> is packing it up',
+  'Compressing objects': '<host> is packing it up',
   'Receiving objects': 'Downloading',
   'Resolving deltas': 'Unpacking',
   'Checking connectivity': 'Checking it over',
@@ -30,16 +30,16 @@ const STEPS: Record<string, string> = {
 
 const PROGRESS = /^(?:remote: )?([A-Z][a-z]+ [a-z]+):\s+(?:(\d{1,3})%(?: \(\d+\/\d+\))?|\d+)(?:, ([\d.]+ [KMGT]?i?B)(?: \| ([\d.]+ [KMGT]?i?B\/s))?)?/;
 
-/** How far a clone has got, from the latest progress line in git's output (lines end in \r or \n). */
-export function parseProgress(output: string): CloneProgress | undefined {
+/** How far a clone has got, from the latest progress line in git's output (lines end in \r or \n). `host` is where it comes from. */
+export function parseProgress(output: string, host = 'GitHub'): CloneProgress | undefined {
   const lines = output.split(/[\r\n]+/);
   for (let i = lines.length - 1; i >= 0; i--) {
     const m = PROGRESS.exec(lines[i].trim());
     if (m && STEPS[m[1]]) {
       const detail = [m[3], m[4]].filter(Boolean).join(' · ');
-      return { step: STEPS[m[1]], ...(m[2] ? { percent: Math.min(100, Number(m[2])) } : {}), ...(detail ? { detail } : {}) };
+      return { step: STEPS[m[1]].replace('<host>', host), ...(m[2] ? { percent: Math.min(100, Number(m[2])) } : {}), ...(detail ? { detail } : {}) };
     }
-    if (/^Cloning into /.test(lines[i].trim())) return { step: 'Connecting to GitHub' };
+    if (/^Cloning into /.test(lines[i].trim())) return { step: `Connecting to ${host}` };
   }
   return undefined;
 }
@@ -69,6 +69,11 @@ export interface CloneEnd {
 export interface CloneRunOptions {
   /** Hears about new progress, at most once a tick. */
   changed?: () => void;
+  /**
+   * Clones with `git clone --progress <url>` and this environment (the credentials of whoever is
+   * adding it) instead of the office's `gh`, from `host` (what the elevator calls it).
+   */
+  git?: { url: string; env: Record<string, string>; host: string };
   stallMs?: number;
   tickMs?: number;
 }
@@ -96,7 +101,7 @@ export class CloneRun {
     this.timer = setInterval(() => this.tick(), opts.tickMs ?? 1000);
   }
 
-  /** Starts `gh repo clone repo dest`, writing to `log`. Resolves once it's running, or to why it couldn't start. */
+  /** Starts `gh repo clone repo dest` (or `git clone`, see `opts.git`), writing to `log`. Resolves once it's running, or to why it couldn't start. */
   static start(repo: string, dest: string, log: string, opts: CloneRunOptions = {}): Promise<CloneRun | string> {
     let fd: number;
     try {
@@ -107,18 +112,20 @@ export class CloneRun {
     return new Promise((resolve) => {
       let child: ChildProcess;
       try {
-        child = spawn('gh', ['repo', 'clone', repo, dest, '--', '--progress'], {
+        const { git } = opts;
+        child = spawn(git ? 'git' : 'gh', git ? ['clone', '--progress', git.url, dest] : ['repo', 'clone', repo, dest, '--', '--progress'], {
           cwd: path.dirname(dest),
           detached: GROUPS,
           stdio: ['ignore', fd, fd],
           windowsHide: true,
           // No prompts: nobody would see them. What would have asked says so and fails instead.
-          env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GH_PROMPT_DISABLED: '1' },
+          env: { ...(git?.env ?? process.env), GIT_TERMINAL_PROMPT: '0', GH_PROMPT_DISABLED: '1' },
         });
       } finally {
         closeSync(fd);
       }
-      child.once('error', (err: NodeJS.ErrnoException) => resolve(err.code === 'ENOENT' ? "The GitHub CLI (gh) isn't installed on the office's machine" : `Couldn't run gh: ${err.message}`));
+      const cmd = opts.git ? 'git' : 'gh';
+      child.once('error', (err: NodeJS.ErrnoException) => resolve(err.code === 'ENOENT' ? (opts.git ? "git isn't installed on the office's machine" : "The GitHub CLI (gh) isn't installed on the office's machine") : `Couldn't run ${cmd}: ${err.message}`));
       child.once('spawn', () => {
         const run = new CloneRun(child.pid!, log, child, opts);
         child.once('exit', (code) => run.end(code));
@@ -174,14 +181,14 @@ export class CloneRun {
     if (size !== this.size) {
       this.size = size;
       this.grewAt = Date.now();
-      const progress = parseProgress(text);
+      const progress = parseProgress(text, this.opts.git?.host);
       if (JSON.stringify(progress) !== JSON.stringify(this.progress)) {
         this.progress = progress;
         this.opts.changed?.();
       }
     } else if (Date.now() - this.grewAt > stallMs) {
       const mins = Math.max(1, Math.round(stallMs / 60_000));
-      this.stop(`Cloning stalled: nothing new from GitHub in ${mins} minute${mins === 1 ? '' : 's'}. Try again, or check the office machine's connection`);
+      this.stop(`Cloning stalled: nothing new from ${this.opts.git?.host ?? 'GitHub'} in ${mins} minute${mins === 1 ? '' : 's'}. Try again, or check the office machine's connection`);
     }
   }
 
@@ -239,10 +246,10 @@ function alive(pid: number): boolean {
   }
 }
 
-/** The process is a `gh repo clone` (the pid wasn't handed to something else since). */
+/** The process is a `gh repo clone` or a `git clone` (the pid wasn't handed to something else since). */
 function isClone(pid: number): boolean {
   try {
-    return /\brepo clone\b/.test(execFileSync('ps', ['-o', 'command=', '-p', String(pid)], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000 }));
+    return /\brepo clone\b|\bgit(?:\.exe)? clone\b/.test(execFileSync('ps', ['-o', 'command=', '-p', String(pid)], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000 }));
   } catch {
     return false;
   }
