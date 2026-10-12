@@ -1,6 +1,7 @@
 // The building's floors: riding the elevator between them and up to the roof, and adding and taking
 // off floors.
-import type { FloorClientMsg } from '../../../shared/protocol.js';
+import { normalizeRepo, sameRepo } from '../../../shared/floors.js';
+import { MAIN_BUILDING, type FloorClientMsg } from '../../../shared/protocol.js';
 import { ROOF } from '../../../shared/rooftop.js';
 import { arrivalSpot, str } from '../../office/input.js';
 import type { HandlerMap, ViewPieces } from './types.js';
@@ -29,6 +30,16 @@ export const floorHandlers = {
   'floor.add'(ctx, c, msg) {
     const who = c.peer.name;
     const repo = str(msg.repo, 200);
+    // A repository is a floor in one building: say whose, and how to get in there instead.
+    const wanted = normalizeRepo(repo);
+    const taken = wanted && [...ctx.building.list(), ...ctx.building.pending()].find((d) => sameRepo(d.repo, wanted));
+    if (taken) {
+      const b = ctx.campus.of(taken);
+      const owner = ctx.accounts.get(b)?.name ?? 'its owner';
+      const where = b === c.accountId ? 'your building' : b === MAIN_BUILDING ? "the office's own building" : `${owner}'s building`;
+      const how = b === c.accountId ? '' : ctx.campus.mayEnter(c, b) ? ': walk over and tap your ID card at its door' : `: ask ${owner} to put you on their guest list`;
+      return ctx.sendTo(c, { t: 'floor.added', repo, error: `${wanted} already has a floor in ${where}${how}` });
+    }
     void ctx.building
       .add(
         repo,
