@@ -43,6 +43,8 @@ export interface WorldDistrict {
   key: string;
   name: string;
   slot: number;
+  /** The Quarter's cells it stands in (see gitlab-quarter.ts): its first, and more as it outgrows them. */
+  cells: number[];
   buildings: WorldBuilding[];
 }
 
@@ -51,6 +53,8 @@ export interface WorldSlots {
   districts: Record<string, number>;
   /** By building key. */
   buildings: Record<string, number>;
+  /** The Quarter's cells, by "<district>#<n>": a district's nth cell. */
+  cells?: Record<string, number>;
 }
 
 export interface WorldState {
@@ -79,6 +83,9 @@ export function buildingName(key: string, district: string): string {
   return rest.length ? rest.join(' › ') : `${key} HQ`;
 }
 
+/** How many buildings a cell of the Quarter holds (see gitlab-quarter.ts). */
+const PER_CELL = 16;
+
 /** The smallest slot number nobody in `taken` has. */
 function freeSlot(taken: Set<number>): number {
   let n = 0;
@@ -93,6 +100,21 @@ function freeSlot(taken: Set<number>): number {
  * a district only while it has a building. Returns the arrangement and the slots to keep.
  */
 export function arrange(projects: readonly WorldProject[], slots: WorldSlots = { districts: {}, buildings: {} }): { districts: WorldDistrict[]; slots: WorldSlots } {
+  const placed = place(projects, slots);
+  // Each district's cells: the ones it had stay its own, and one it needs now takes the first free.
+  const cells: Record<string, number> = {};
+  const need = placed.districts.flatMap((d) => Array.from({ length: Math.floor(Math.max(-1, ...d.buildings.map((b) => b.slot)) / PER_CELL) + 1 }, (_, n) => `${d.key}#${n}`));
+  const taken = new Set<number>();
+  for (const k of need) if (slots.cells?.[k] !== undefined && !taken.has(slots.cells[k])) taken.add((cells[k] = slots.cells[k]));
+  // In district order, then their cells in order: a district's first cell before anyone's second.
+  for (const k of [...need].sort((a, b) => Number(a.split('#').pop()) - Number(b.split('#').pop()) || placed.slots.districts[a.slice(0, a.lastIndexOf('#'))] - placed.slots.districts[b.slice(0, b.lastIndexOf('#'))])) {
+    if (cells[k] === undefined) taken.add((cells[k] = freeSlot(taken)));
+  }
+  const districts = placed.districts.map((d) => ({ ...d, cells: need.filter((k) => k.startsWith(`${d.key}#`) && k.lastIndexOf('#') === d.key.length).map((k) => cells[k]) }));
+  return { districts, slots: { ...placed.slots, cells } };
+}
+
+function place(projects: readonly WorldProject[], slots: WorldSlots): { districts: Omit<WorldDistrict, 'cells'>[]; slots: WorldSlots } {
   const byBuilding = new Map<string, { district: string; projects: WorldProject[] }>();
   for (const p of projects) {
     const { district, building } = placeOf(p);
@@ -110,7 +132,7 @@ export function arrange(projects: readonly WorldProject[], slots: WorldSlots = {
   for (const d of districtKeys) if (slots.districts[d] !== undefined && !taken.has(slots.districts[d])) taken.add((next.districts[d] = slots.districts[d]));
   for (const d of districtKeys.sort()) if (next.districts[d] === undefined) taken.add((next.districts[d] = freeSlot(taken)));
 
-  const districts: WorldDistrict[] = districtKeys.map((d) => {
+  const districts: Omit<WorldDistrict, 'cells'>[] = districtKeys.map((d) => {
     const keys = [...byBuilding].filter(([, b]) => b.district === d).map(([k]) => k);
     const used = new Set<number>();
     for (const k of keys) if (slots.buildings[k] !== undefined && !used.has(slots.buildings[k])) used.add((next.buildings[k] = slots.buildings[k]));

@@ -1,7 +1,7 @@
 import type { Ctx } from '../../core/context';
 import { store } from '../../state';
 import { $, h, modalOpen } from '../../ui/dom';
-import { campusMap, type CampusMap, type MapDot } from './map';
+import { campusMap, onMapChanged, type CampusMap, type MapDot } from './map';
 import { outdoorAt, standsAt } from './where';
 
 // The minimap, as a game has one: a round window on the map in the bottom-right corner, north up,
@@ -45,6 +45,7 @@ export function mountMinimap(ctx: Ctx, open: () => void) {
     last = 0;
   };
   store.on('campus', redraw);
+  onMapChanged(redraw);
   redraw();
 
   ctx.ticks.add('hud', () => {

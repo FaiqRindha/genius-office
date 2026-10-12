@@ -133,7 +133,8 @@ export class GitLabWorld {
     }
     const all = [...projects.values()].sort((a, b) => a.id - b.id);
     const { districts, slots } = arrange(all, this.saved?.url === url ? this.saved.slots : undefined);
-    this.saved = { url, slots: { districts: { ...this.saved?.slots.districts, ...slots.districts }, buildings: { ...this.saved?.slots.buildings, ...slots.buildings } }, projects: all, syncedAt: Date.now() };
+    const was = this.saved?.url === url ? this.saved.slots : undefined;
+    this.saved = { url, slots: { districts: { ...was?.districts, ...slots.districts }, buildings: { ...was?.buildings, ...slots.buildings }, cells: { ...was?.cells, ...slots.cells } }, projects: all, syncedAt: Date.now() };
     this.save();
     this.publish({ url, districts, projects: all.length, syncedAt: this.saved.syncedAt, ...(errors.length ? { error: errors[0] } : {}) });
   }
@@ -164,7 +165,7 @@ export class GitLabWorld {
     try {
       const s = JSON.parse(readFileSync(this.file, 'utf8')) as Partial<Saved>;
       if (typeof s.url !== 'string' || !s.slots || !Array.isArray(s.projects)) return;
-      this.saved = { url: s.url, slots: { districts: s.slots.districts ?? {}, buildings: s.slots.buildings ?? {} }, projects: s.projects, syncedAt: s.syncedAt ?? 0 };
+      this.saved = { url: s.url, slots: { districts: s.slots.districts ?? {}, buildings: s.slots.buildings ?? {}, cells: s.slots.cells ?? {} }, projects: s.projects, syncedAt: s.syncedAt ?? 0 };
       // What it was at the last look stands until the next: the city doesn't start empty.
       const { districts } = arrange(this.saved.projects, this.saved.slots);
       this.current = { url: s.url, districts, projects: this.saved.projects.length, syncedAt: this.saved.syncedAt };
